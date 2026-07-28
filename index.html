@@ -690,30 +690,28 @@ function parsePlanilha(matriz){
   const out=[];
   if(!matriz.length) return out;
 
-  // detecta cabeçalho nomeado
+  // Leitura POR POSIÇÃO (a ordem é sempre ID, Nome, Cluster, Veículo, Telefone).
+  // Ignora o nome do cabeçalho — só detecta a 1ª linha pra pular se for cabeçalho.
   const primeira = matriz[0].map(norm);
   const temCab = primeira.includes('ID') && (primeira.includes('NOME') || primeira.includes('CLUSTER'));
-  let idx = {id:0, nome:1, cluster:2, veiculo:3, telefone:4};
-  let inicio = 0;
-  if(temCab){
-    const acha = (...alt)=>{ for(const a of alt){ const i=primeira.indexOf(a); if(i>=0) return i; } return -1; };
-    idx = {
-      id: acha('ID'), nome: acha('NOME'), cluster: acha('CLUSTER','ROTA'),
-      veiculo: acha('VEICULO','VEÍCULO','TIPO','TIPO DE VEICULO'), telefone: acha('TELEFONE','FONE','CELULAR')
-    };
-    inicio = 1;
-  }
-  const cel=(row,i)=> (i>=0 && row[i]!=null) ? String(row[i]).trim() : '';
+  const inicio = temCab ? 1 : 0;
+
+  const cel=(row,i)=> (row[i]!=null) ? String(row[i]).trim() : '';
   for(let r=inicio; r<matriz.length; r++){
     const row = matriz[r]; if(!row) continue;
-    const id = cel(row, idx.id);
+    const id = cel(row,0);
     if(!id) continue;
+    // veículo: normalmente na 4ª coluna; se vier vazio, procura o tipo em qualquer coluna
+    let veiculo = cel(row,3);
+    if(!/MOTO|FIORINO|PASSEIO/.test(norm(veiculo))){
+      for(const c of row){ if(/MOTO|FIORINO|PASSEIO/.test(norm(c))){ veiculo=String(c).trim(); break; } }
+    }
     out.push({
       id,
-      nome: cel(row, idx.nome),
-      cluster: cel(row, idx.cluster),
-      veiculo: cel(row, idx.veiculo),
-      telefone: cel(row, idx.telefone)
+      nome:     cel(row,1),
+      cluster:  cel(row,2),
+      veiculo,
+      telefone: cel(row,4)
     });
   }
   return out;
