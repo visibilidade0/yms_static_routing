@@ -120,6 +120,9 @@
   .prev-tbl{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px}
   .prev-tbl td,.prev-tbl th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
   .prev-tbl th{color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.4px}
+  .rel-tbl{width:100%;border-collapse:collapse;font-size:13px}
+  .rel-tbl td,.rel-tbl th{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+  .rel-tbl th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
   .row .field{flex:1;min-width:140px;margin-bottom:0}
   .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin:12px 0}
@@ -332,6 +335,19 @@
       </div>
     </section>
 
+    <!-- RELATÓRIO (admin) -->
+    <section id="secRelatorio" class="tabpage hidden">
+      <div class="panel">
+        <h2>Relatório — rotas finalizadas por mesa</h2>
+        <p class="hint">Cada rota finalizada no YMS registra a mesa e o horário. Atualiza em tempo real.</p>
+        <div class="row" style="margin-bottom:14px">
+          <button id="btnBaixarCsv" class="btn small">Baixar CSV</button>
+          <button id="btnCopiarResumo" class="btn small sec">Copiar resumo</button>
+        </div>
+        <div id="relatorioWrap"></div>
+      </div>
+    </section>
+
     <!-- USUÁRIOS (admin) -->
     <section id="secUsers" class="tabpage hidden">
       <div class="panel">
@@ -522,6 +538,7 @@ const ABAS = [
   {id:'secCheckin', tab:'Check-in', admin:false},
   {id:'secStatus',  tab:'Status',   admin:false},
   {id:'secImport',  tab:'Importar', admin:true},
+  {id:'secRelatorio', tab:'Relatório', admin:true},
   {id:'secUsers',   tab:'Usuários',  admin:true},
 ];
 
@@ -553,6 +570,7 @@ function abrirAba(id){
   document.querySelectorAll('.tabpage').forEach(s=>s.classList.add('hidden'));
   $(id).classList.remove('hidden');
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.sec===id));
+  if(id==='secRelatorio') renderRelatorio();
   // câmera só liga na aba de check-in
   if(id==='secCheckin'){ /* usuário liga manualmente */ } else { pararCamera(); }
 }
@@ -566,6 +584,7 @@ function ouvirOperacao(){
     snap.forEach(d=> opCache[d.id] = {docId:d.id, ...d.data()});
     renderStatus();
     renderStatusMini();
+    if(!$('secRelatorio').classList.contains('hidden')) renderRelatorio();
   }, err=> toast('Erro na operação: '+err.message));
 }
 
@@ -663,12 +682,13 @@ function linhaMotorista(d){
              : noHub ? `<span class="badge b-ok">No hub</span>`
                      : `<span class="badge b-pend">Pendente</span>`;
   const hora = noHub && d.horaCheckin ? `<div class="hora">Chegou: ${agoraHora(d.horaCheckin)}</div>` : '';
+  const fimInfo = fim ? `<div class="hora">Finalizado${d.finalizadoPor?' pela '+esc(d.finalizadoPor):''}${d.finalizadoEm?' · '+agoraHora(d.finalizadoEm):''}</div>` : '';
   const btnSub = ehAdmin ? `<button class="btn small sec" onclick="pedirSubstituir('${esc(d.docId)}')">Substituir</button>` : '';
   return `<div class="mot">
     <div class="info">
       <div class="top"><span class="nome">${esc(d.nome||'—')}</span><span class="id">#${esc(d.id||d.docId)}</span></div>
       <div class="sub">${esc(d.cluster||'')} · ${esc(d.veiculo||'')}${d.telefone?' · '+esc(d.telefone):''}</div>
-      ${hora}
+      ${hora}${fimInfo}
     </div>
     <div class="mot-acoes">${badge}${btnSub}</div>
   </div>`;
@@ -689,6 +709,77 @@ function renderStatusMini(){
       const nh=porLetra[l].filter(d=>checkinDe(d)==='no_hub').length;
       return `<button style="cursor:default">${l} <span class="c">${nh}/${porLetra[l].length}</span></button>`;
     }).join('') + `</div>`;
+}
+
+/* ==================================================================
+   RELATÓRIO — rotas finalizadas por mesa
+   ================================================================== */
+function tsMs(ts){ if(!ts) return 0; try{ return ts.toDate ? ts.toDate().getTime() : new Date(ts).getTime(); }catch(e){ return 0; } }
+function dataHoje(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
+
+function finalizadosOrdenados(){
+  return Object.values(opCache)
+    .filter(d=>d.ymsStatus==='finalizado')
+    .sort((a,b)=> tsMs(a.finalizadoEm)-tsMs(b.finalizadoEm));
+}
+
+function renderRelatorio(){
+  const cont = $('relatorioWrap');
+  if(!cont) return;
+  const fin = finalizadosOrdenados();
+  if(!fin.length){ cont.innerHTML='<div class="empty">Nenhuma rota finalizada no YMS ainda.</div>'; return; }
+
+  const porMesa = {};
+  fin.forEach(d=>{ const m=d.finalizadoPor||'(sem mesa)'; (porMesa[m]=porMesa[m]||[]).push(d); });
+  const mesas = Object.keys(porMesa).sort((a,b)=> porMesa[b].length-porMesa[a].length || a.localeCompare(b));
+
+  const ranking = mesas.map((m,i)=>`<tr><td>${i+1}º</td><td><b>${esc(m)}</b></td><td>${porMesa[m].length}</td></tr>`).join('');
+  const detalhe = fin.map(d=>`<tr>
+      <td>${esc(d.id||d.docId)}</td><td>${esc(d.nome||'')}</td><td>${esc(d.cluster||'')}</td>
+      <td>${esc(d.veiculo||'')}</td><td><b>${esc(d.finalizadoPor||'—')}</b></td><td>${esc(agoraHora(d.finalizadoEm))}</td>
+    </tr>`).join('');
+
+  cont.innerHTML = `
+    <div class="stats" style="margin-bottom:14px">
+      <div class="stat"><div class="n">${fin.length}</div><div class="l">Rotas finalizadas</div></div>
+      <div class="stat"><div class="n">${mesas.length}</div><div class="l">Mesas ativas</div></div>
+    </div>
+    <h3 style="font-size:14px;margin:0 0 8px">Total por mesa</h3>
+    <table class="rel-tbl"><thead><tr><th>#</th><th>Mesa</th><th>Rotas</th></tr></thead><tbody>${ranking}</tbody></table>
+    <h3 style="font-size:14px;margin:18px 0 8px">Detalhado</h3>
+    <div style="overflow-x:auto"><table class="rel-tbl">
+      <thead><tr><th>ID</th><th>Nome</th><th>Cluster</th><th>Veículo</th><th>Mesa</th><th>Finalizado em</th></tr></thead>
+      <tbody>${detalhe}</tbody></table></div>`;
+}
+
+function baixarRelatorioCSV(){
+  const fin = finalizadosOrdenados();
+  if(!fin.length) return toast('Nada para exportar ainda.');
+  const linhas = [['ID','Nome','Cluster','Veiculo','Telefone','Mesa','Finalizado em']];
+  fin.forEach(d=> linhas.push([d.id||d.docId, d.nome||'', d.cluster||'', d.veiculo||'', d.telefone||'', d.finalizadoPor||'', agoraHora(d.finalizadoEm)]));
+  const csv = linhas.map(r=> r.map(c=>`"${String(c==null?'':c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=`relatorio_mesas_${dataHoje()}.csv`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+function copiarResumo(){
+  const fin = finalizadosOrdenados();
+  if(!fin.length) return toast('Nada para copiar ainda.');
+  const porMesa = {};
+  fin.forEach(d=>{ const m=d.finalizadoPor||'(sem mesa)'; porMesa[m]=(porMesa[m]||0)+1; });
+  const mesas = Object.keys(porMesa).sort((a,b)=> porMesa[b]-porMesa[a] || a.localeCompare(b));
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  let txt = `📋 Rotas finalizadas por mesa — ${hoje}\n\n`;
+  mesas.forEach((m,i)=> txt += `${i+1}º ${m} — ${porMesa[m]}\n`);
+  txt += `\nTotal: ${fin.length} rotas`;
+  navigator.clipboard.writeText(txt).then(()=>toast('Resumo copiado!')).catch(()=>toast('Não consegui copiar.'));
+}
+
+if(!NAO_CONFIGURADO){
+  $('btnBaixarCsv').onclick = baixarRelatorioCSV;
+  $('btnCopiarResumo').onclick = copiarResumo;
 }
 
 /* ==================================================================
