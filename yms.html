@@ -370,25 +370,61 @@ function pintarDonos(){
 
 /* ---- tempo real ---- */
 let avisouErro=false;
+function bannerErro(txt){
+  const b=document.createElement('div');
+  b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:3000;background:#fee2e2;color:#b91c1c;'
+    +'border-bottom:1px solid #fecaca;padding:10px 16px;font-weight:600;font-size:13px;text-align:center;'
+    +'font-family:system-ui,sans-serif;';
+  b.innerHTML='';
+  b.appendChild(document.createTextNode(txt+'  '));
+  const btn=document.createElement('button');
+  btn.textContent='OK';
+  btn.style.cssText='margin-left:8px;padding:3px 12px;font-size:12px;background:#b91c1c;color:#fff;border:none;border-radius:6px;cursor:pointer;box-shadow:none;';
+  btn.onclick=()=>b.remove();
+  b.appendChild(btn);
+  document.body.appendChild(b);
+}
 function avisoLeitura(qual, err){
   console.error('Erro ao ler '+qual, err);
-  if(!avisouErro){
+  // só avisa quando for erro de PERMISSÃO (persistente). Oscilação de rede o Firestore reconecta sozinho.
+  if(err && err.code==='permission-denied' && !avisouErro){
     avisouErro=true;
-    alert('Não consegui ler os dados ('+qual+').\n\nVerifique se as regras do Firestore foram publicadas (leitura de operacao/rotas com "signed()") e recarregue a página.');
+    bannerErro('Sem permissão para ler "'+qual+'". Confira as regras do Firestore ('+qual+' com "read: if signed();") e recarregue a página.');
   }
 }
 function ouvirDados(){
-  unsubOp = db.collection(C_OP).onSnapshot(s=>{
+  unsubOp = escutar(C_OP, s=>{
     opCache={}; s.forEach(d=> opCache[d.id]={docId:d.id, ...d.data()});
     carregarResumo();
     if($('modalBg').style.display==='block' && idAtual) rebuscarLocal();
     if($('rankingBg').style.display==='block') montarRanking(calcularRanking());
-  }, err=> avisoLeitura('operação', err));
-  unsubRotas = db.collection(C_ROTAS).onSnapshot(s=>{
+  }, 'operação');
+  unsubRotas = escutar(C_ROTAS, s=>{
     rotasCache={}; s.forEach(d=> rotasCache[d.id]={docId:d.id, ...d.data()});
     pintarDonos();
     if($('modalBg').style.display==='block' && idAtual) rebuscarLocal();
-  }, err=> avisoLeitura('rotas', err));
+  }, 'rotas');
+}
+
+// escuta uma coleção; se der erro de permissão (ex.: regra ainda propagando),
+// tenta de novo algumas vezes antes de avisar
+function escutar(colName, onData, rotulo){
+  let tentativas = 0, unsub = null;
+  const attach = ()=>{
+    unsub = db.collection(colName).onSnapshot(
+      s=>{ tentativas = 0; onData(s); },       // sucesso zera o contador
+      err=>{
+        console.error('Erro ao ler '+rotulo, err);
+        if(err && err.code==='permission-denied'){
+          tentativas++;
+          if(tentativas <= 4){ setTimeout(attach, 2500); }   // dá tempo da regra valer
+          else avisoLeitura(rotulo, err);
+        }
+      }
+    );
+  };
+  attach();
+  return ()=>{ if(unsub) unsub(); };
 }
 
 /* ---- modal ---- */
