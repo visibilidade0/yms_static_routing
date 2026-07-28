@@ -140,6 +140,9 @@
   /* modal */
   .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;
     z-index:50;padding:20px}
+  .modal-cad{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;max-width:440px;width:100%;
+    max-height:88dvh;overflow:auto}
+  .modal-cad h3{margin:0 0 6px;font-size:17px}
   .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;max-width:420px;width:100%;
     max-height:80dvh;overflow:auto}
   .modal h3{margin:0 0 12px;font-size:16px}
@@ -287,9 +290,19 @@
         <div id="importMsg"></div>
       </div>
       <div class="panel">
-        <h2>Base salva</h2>
-        <p class="hint">Banco permanente com todos os motoristas já importados alguma vez. É daqui que a troca puxa pelo ID.</p>
-        <div class="stat" style="max-width:180px"><div class="n" id="baseCount">—</div><div class="l">motoristas na base</div></div>
+        <h2>Base salva (cadastro permanente)</h2>
+        <p class="hint">Todos os motoristas já cadastrados. É daqui que a substituição puxa pelo ID.
+          Importe aqui o cadastro geral — aceita <b>ID, Nome, Telefone, Veículo</b> em qualquer ordem (detecta telefone e veículo sozinho). Não mexe na operação do dia.</p>
+        <div class="stat" style="max-width:220px;margin-bottom:12px"><div class="n" id="baseCount">—</div><div class="l">motoristas na base</div></div>
+        <label id="dropBase" for="fileBase" class="dropzone">
+          <div class="dz-icon">👥</div>
+          <div class="dz-txt">Clique para escolher o cadastro geral</div>
+          <div class="dz-sub">.xlsx · .xls · .csv</div>
+        </label>
+        <input id="fileBase" type="file" accept=".xlsx,.xls,.csv" class="hidden" />
+        <div id="previewBase"></div>
+        <button id="btnImportarBase" class="btn" style="margin-top:10px" disabled>Cadastrar na base</button>
+        <div id="baseMsg"></div>
       </div>
     </section>
 
@@ -298,10 +311,10 @@
       <div class="panel">
         <h2>Substituir motorista</h2>
         <p class="hint">Quando alguém não comparece: informe o ID de quem sai e o ID de quem entra.
-          O novo é puxado da base salva — não precisa redigitar os dados dele.</p>
+          O novo é puxado da base — se ele ainda não estiver cadastrado, abre um cadastro rápido.</p>
         <div class="row">
           <div class="field"><label>ID que sai (remover do dia)</label><input id="inSai" type="text" inputmode="numeric" placeholder="ID atual" /></div>
-          <div class="field"><label>ID que entra (da base)</label><input id="inEntra" type="text" inputmode="numeric" placeholder="Novo ID" /></div>
+          <div class="field"><label>ID que entra</label><input id="inEntra" type="text" inputmode="numeric" placeholder="Novo ID" /></div>
         </div>
         <button id="btnTrocar" class="btn">Substituir</button>
         <div id="trocaMsg"></div>
@@ -334,6 +347,24 @@
       </div>
     </section>
   </main>
+
+  <!-- MODAL: cadastrar motorista (usado na substituição quando não está na base) -->
+  <div id="modalCad" class="modal-bg hidden">
+    <div class="modal-cad">
+      <h3 id="modalCadTitulo">Cadastrar motorista</h3>
+      <p class="hint" style="margin-top:0">Este ID não está na base. Preencha para cadastrar e concluir a substituição.</p>
+      <div class="field"><label>ID</label><input id="cadId" type="text" readonly /></div>
+      <div class="field"><label>Nome</label><input id="cadNome" type="text" placeholder="Nome do motorista" /></div>
+      <div class="field"><label>Cluster / Rota</label><input id="cadCluster" type="text" placeholder="Ex.: A-2+A-2 ou C-15 (43) C-16 (27)" /></div>
+      <div class="field"><label>Veículo</label><input id="cadVeiculo" type="text" placeholder="Moto, Fiorino, Passeio..." /></div>
+      <div class="field"><label>Telefone</label><input id="cadTelefone" type="text" inputmode="numeric" placeholder="Telefone" /></div>
+      <div class="row" style="margin-top:6px">
+        <button id="cadSalvar" class="btn" style="flex:1">Cadastrar e substituir</button>
+        <button id="cadCancelar" class="btn sec" style="flex:1">Cancelar</button>
+      </div>
+      <div id="cadMsg"></div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -804,13 +835,98 @@ if(!NAO_CONFIGURADO){
 function importMsg(txt,tipo){ $('importMsg').innerHTML=`<div class="msg ${tipo}">${esc(txt)}</div>`; }
 
 function ouvirBaseCount(){
-  // leitura leve: conta uma vez ao abrir (sem listener contínuo)
   db.collection(C_BASE).get().then(s=> $('baseCount').textContent = s.size)
     .catch(()=> $('baseCount').textContent='—');
 }
 
 /* ==================================================================
-   SUBSTITUIR (admin)
+   IMPORTAR PARA A BASE (cadastro permanente, sem operação)
+   Detecta colunas por conteúdo: ID (1ª), Nome (2ª), Telefone e Veículo por padrão.
+   ================================================================== */
+let filaBase = [];
+function ehTelefone(v){ return /^\+?\d[\d\s()-]{8,}$/.test(String(v||'').trim()) && String(v).replace(/\D/g,'').length>=8; }
+function ehVeiculo(v){ return /MOTO|FIORINO|PASSEIO/.test(norm(v)); }
+
+function parseBase(matriz){
+  const out=[];
+  if(!matriz.length) return out;
+  const primeira = matriz[0].map(norm);
+  const temCab = primeira.includes('ID') || primeira.includes('NOME');
+  const inicio = temCab ? 1 : 0;
+  const cel=(row,i)=> (row[i]!=null) ? String(row[i]).trim() : '';
+  for(let r=inicio; r<matriz.length; r++){
+    const row = matriz[r]; if(!row) continue;
+    const id = cel(row,0);
+    if(!id) continue;
+    let telefone='', veiculo='';
+    for(let i=2;i<row.length;i++){
+      const c = cel(row,i);
+      if(!veiculo && ehVeiculo(c)) veiculo=c;
+      else if(!telefone && ehTelefone(c)) telefone=c;
+    }
+    out.push({ id, nome: cel(row,1), telefone, veiculo, cluster:'' });
+  }
+  return out;
+}
+
+if(!NAO_CONFIGURADO){
+  const dzB=$('dropBase'), fb=$('fileBase');
+  fb.onchange = ()=>{ if(fb.files[0]) lerBase(fb.files[0]); };
+  dzB.addEventListener('dragover', e=>{ e.preventDefault(); dzB.classList.add('drag'); });
+  dzB.addEventListener('dragleave', ()=> dzB.classList.remove('drag'));
+  dzB.addEventListener('drop', e=>{ e.preventDefault(); dzB.classList.remove('drag'); if(e.dataTransfer.files[0]) lerBase(e.dataTransfer.files[0]); });
+
+  $('btnImportarBase').onclick = async ()=>{
+    if(!filaBase.length) return baseMsg('Nenhum arquivo carregado.','err');
+    $('btnImportarBase').disabled=true; baseMsg('Cadastrando '+filaBase.length+'…','warn');
+    try{
+      let n=0;
+      for(let i=0;i<filaBase.length;i+=400){
+        const batch=db.batch();
+        filaBase.slice(i,i+400).forEach(m=>{
+          const id=san(m.id);
+          batch.set(db.collection(C_BASE).doc(id), {
+            id:m.id, nome:m.nome, telefone:m.telefone, veiculo:m.veiculo,
+            cluster:m.cluster||'', letra:'', atualizadoEm:FV.serverTimestamp()
+          }, {merge:true});
+          n++;
+        });
+        await batch.commit();
+      }
+      baseMsg(`${n} motoristas cadastrados na base.`,'ok');
+      filaBase=[]; $('fileBase').value=''; $('previewBase').innerHTML='';
+      ouvirBaseCount();
+    }catch(e){ baseMsg('Erro: '+e.message,'err'); }
+    finally{ $('btnImportarBase').disabled = filaBase.length===0; }
+  };
+}
+function lerBase(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const matriz=XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
+      filaBase=parseBase(matriz);
+      previewBase(file.name);
+    }catch(err){ baseMsg('Não consegui ler o arquivo: '+err.message,'err'); }
+  };
+  reader.onerror=()=>baseMsg('Erro ao abrir o arquivo.','err');
+  reader.readAsArrayBuffer(file);
+}
+function previewBase(nome){
+  const box=$('previewBase');
+  if(!filaBase.length){ box.innerHTML=`<div class="msg warn">Nenhum motorista válido em <b>${esc(nome)}</b>.</div>`; $('btnImportarBase').disabled=true; return; }
+  const amostra=filaBase.slice(0,5).map(m=>`<tr><td>${esc(m.id)}</td><td>${esc(m.nome)}</td><td>${esc(m.veiculo)}</td><td>${esc(m.telefone)}</td></tr>`).join('');
+  box.innerHTML=`<div class="msg ok" style="margin-top:12px"><b>${filaBase.length}</b> motoristas lidos de <b>${esc(nome)}</b>.</div>
+    <table class="prev-tbl"><thead><tr><th>ID</th><th>Nome</th><th>Veículo</th><th>Telefone</th></tr></thead><tbody>${amostra}</tbody></table>
+    ${filaBase.length>5?`<div class="hint">…e mais ${filaBase.length-5}.</div>`:''}`;
+  $('btnImportarBase').disabled=false;
+}
+function baseMsg(txt,tipo){ $('baseMsg').innerHTML=`<div class="msg ${tipo}">${esc(txt)}</div>`; }
+
+/* ==================================================================
+   SUBSTITUIR (admin) — com cadastro rápido quando não está na base
    ================================================================== */
 if(!NAO_CONFIGURADO){
   $('btnTrocar').onclick = async ()=>{
@@ -818,25 +934,85 @@ if(!NAO_CONFIGURADO){
     if(!entra) return trocaMsg('Informe o ID que entra.','err');
     $('btnTrocar').disabled=true;
     try{
-      // busca o novo na base salva
+      // cluster/rota que o motorista que sai estava fazendo (o que entra assume)
+      let clusterHerdado='';
+      if(sai){
+        const saiDoc = await db.collection(C_OP).doc(san(sai)).get();
+        if(saiDoc.exists) clusterHerdado = saiDoc.data().cluster || '';
+      }
       const baseDoc = await db.collection(C_BASE).doc(san(entra)).get();
-      if(!baseDoc.exists) throw new Error('ID '+entra+' não está na base salva. Importe-o antes.');
+      if(!baseDoc.exists){
+        // não está na base -> abre modal de cadastro
+        abrirCadastro(entra, sai, clusterHerdado);
+        $('btnTrocar').disabled=false;
+        return;
+      }
       const nb = baseDoc.data();
-      // adiciona na operação
-      await db.collection(C_OP).doc(san(entra)).set({
-        id:nb.id, nome:nb.nome, cluster:nb.cluster, veiculo:nb.veiculo, telefone:nb.telefone,
-        letra: nb.letra || primeiraLetra(nb.cluster),
-        checkin:'pendente', horaCheckin:null, ymsStatus:'aguardando', mesa:'', finalizadoEm:null
-      }, {merge:true});
-      // remove quem sai
-      if(sai){ await db.collection(C_OP).doc(san(sai)).delete(); }
+      // se o que entra não tem cluster próprio, herda a rota de quem sai
+      const cluster = nb.cluster || clusterHerdado;
+      await efetuarTroca(sai, { id:nb.id||entra, nome:nb.nome, cluster, veiculo:nb.veiculo, telefone:nb.telefone });
       trocaMsg(`Pronto: ${nb.nome||entra} entrou${sai?` no lugar de #${sai}`:''}.`,'ok');
       $('inSai').value=''; $('inEntra').value='';
     }catch(e){ trocaMsg(e.message,'err'); }
     finally{ $('btnTrocar').disabled=false; }
   };
 }
-function trocaMsg(txt,tipo){ $('trocaMsg').innerHTML=`<div class="msg ${tipo}">${esc(txt)}</div>`; }
+
+// coloca o motorista (entra) na operação e remove quem sai
+async function efetuarTroca(sai, dados){
+  const id = san(dados.id);
+  await db.collection(C_OP).doc(id).set({
+    id: dados.id, nome: dados.nome||'', cluster: dados.cluster||'', veiculo: dados.veiculo||'', telefone: dados.telefone||'',
+    letra: primeiraLetra(dados.cluster),
+    checkin:'pendente', horaCheckin:null, ymsStatus:'aguardando', mesa:'', finalizadoEm:null
+  }, {merge:true});
+  if(sai){ await db.collection(C_OP).doc(san(sai)).delete(); }
+}
+
+/* ---- Modal de cadastro ---- */
+let cadCtx = null; // {sai, entra}
+function abrirCadastro(entra, sai, clusterHerdado){
+  cadCtx = { sai, entra };
+  $('cadId').value = entra;
+  $('cadNome').value = '';
+  $('cadCluster').value = clusterHerdado || '';
+  $('cadVeiculo').value = '';
+  $('cadTelefone').value = '';
+  $('cadMsg').innerHTML = '';
+  $('modalCad').classList.remove('hidden');
+  setTimeout(()=>$('cadNome').focus(), 100);
+}
+function fecharCadastro(){ $('modalCad').classList.add('hidden'); cadCtx=null; }
+
+if(!NAO_CONFIGURADO){
+  $('cadCancelar').onclick = fecharCadastro;
+  $('modalCad').addEventListener('click', e=>{ if(e.target===$('modalCad')) fecharCadastro(); });
+  $('cadSalvar').onclick = async ()=>{
+    if(!cadCtx) return;
+    const id = cadCtx.entra;
+    const nome = $('cadNome').value.trim();
+    const cluster = $('cadCluster').value.trim();
+    const veiculo = $('cadVeiculo').value.trim();
+    const telefone = $('cadTelefone').value.trim();
+    if(!nome) return cadMsg('Informe o nome.','err');
+    $('cadSalvar').disabled=true;
+    try{
+      // grava na base permanente
+      await db.collection(C_BASE).doc(san(id)).set({
+        id, nome, cluster, veiculo, telefone, letra: primeiraLetra(cluster), atualizadoEm:FV.serverTimestamp()
+      }, {merge:true});
+      // efetua a substituição na operação
+      await efetuarTroca(cadCtx.sai, { id, nome, cluster, veiculo, telefone });
+      const sai = cadCtx.sai;
+      fecharCadastro();
+      trocaMsg(`Cadastrado e substituído: ${nome} entrou${sai?` no lugar de #${sai}`:''}.`,'ok');
+      $('inSai').value=''; $('inEntra').value='';
+      ouvirBaseCount();
+    }catch(e){ cadMsg('Erro: '+e.message,'err'); }
+    finally{ $('cadSalvar').disabled=false; }
+  };
+}
+function cadMsg(txt,tipo){ $('cadMsg').innerHTML=`<div class="msg ${tipo}">${esc(txt)}</div>`; }
 
 /* ==================================================================
    YMS — mesas
