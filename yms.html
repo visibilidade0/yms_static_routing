@@ -404,13 +404,26 @@ function statusLabel(d){
   if(d.ymsStatus==='finalizado') return 'FINALIZADO';
   return (d.checkin==='no_hub') ? 'NO HUB' : 'PENDENTE';
 }
-function pacotesCarro(cluster){ const m=String(cluster||'').match(/\/\s*(\d+)/); return m?Number(m[1]):0; }
-function clustersMoto(cluster){
-  return String(cluster||'').split('+').map(p=>{
-    const m=p.trim().match(/^([A-Z]-?\d+)\((\d+)\)$/i);
-    if(m) return {cluster:m[1].toUpperCase(), pacotes:Number(m[2])};
-    return {cluster:p.trim(), pacotes:0};
-  }).filter(x=>x.cluster);
+/* Analisa a rota e se adapta ao formato:
+   - COM parênteses  (ex.: "C-15 (43) C-16 (27)" ou "B-16(26)+B-17(45)"): soma tudo -> total
+   - SEM parênteses com /N no fim (ex.: "B-13+B-14+B-9/91"): o N é o total
+   - separadores podem ser "+" ou espaços, em qualquer combinação */
+function analisarCluster(str){
+  const s = String(str||'');
+  const clusters = [];
+  let temParen=false, somaParen=0;
+  const re=/([A-Za-z]-?\d+)\s*(?:\((\d+)\))?/g;
+  let m;
+  while((m=re.exec(s))!==null){
+    const code=m[1].toUpperCase();
+    const temNum = m[2]!=null && m[2]!=='';
+    const pac = temNum ? Number(m[2]) : 0;
+    if(temNum){ temParen=true; somaParen+=pac; }
+    clusters.push({cluster:code, pacotes:pac});
+  }
+  const mb=s.match(/\/\s*(\d+)/);
+  const totalBarra = mb ? Number(mb[1]) : 0;
+  return { clusters, temParen, totalBarra, totalPacotes: temParen ? somaParen : totalBarra };
 }
 
 /* ---- BUSCA com lógica de DONO DA ROTA ---- */
@@ -499,15 +512,16 @@ function renderizar(d, redirecionarPara){
   stCell.className = fim ? 'status-finalizado' : 'status-falta';
 
   const ehMoto = String(d.veiculo||'').toUpperCase().includes('MOTO');
-  const pac = pacotesCarro(d.cluster);
-  if(!ehMoto && pac>0){
-    $('resRota').innerHTML = `${esc(d.cluster)}<br><span class="pacotes-destaque">PASSAR ${pac} PACOTES</span>`;
+  const info = analisarCluster(d.cluster);
+  // Sem parênteses mas com /N no fim: mostra "PASSAR N" na linha da rota (como antes)
+  if(!info.temParen && info.totalBarra>0){
+    $('resRota').innerHTML = `${esc(d.cluster)}<br><span class="pacotes-destaque">PASSAR ${info.totalBarra} PACOTES</span>`;
   }else{
     $('resRota').innerText = d.cluster||'';
   }
 
   montarMesmaRota(d);
-  montarMoto(d, ehMoto);
+  montarPacotes(info, ehMoto);
 }
 
 function montarMesmaRota(d){
@@ -517,10 +531,13 @@ function montarMesmaRota(d){
   if(!lista.length){ tbody.innerHTML='<tr><td colspan="5">NENHUM OUTRO MOTORISTA NESSA MESMA ROTA</td></tr>'; return; }
   lista.forEach(m=>{
     const fim = m.ymsStatus==='finalizado';
-    const veic=String(m.veiculo||'').toUpperCase();
-    const pac=pacotesCarro(m.cluster);
+    const info=analisarCluster(m.cluster);
     let rotaHtml=esc(m.cluster||'');
-    if(!veic.includes('MOTO') && pac>0) rotaHtml=`${esc(m.cluster)}<br><span class="pacotes-destaque">PASSAR ${pac} PACOTES</span>`;
+    if(info.temParen){
+      rotaHtml=`${esc(m.cluster)}<br><span class="pacotes-destaque">TOTAL ${info.totalPacotes} PACOTES</span>`;
+    }else if(info.totalBarra>0){
+      rotaHtml=`${esc(m.cluster)}<br><span class="pacotes-destaque">PASSAR ${info.totalBarra} PACOTES</span>`;
+    }
     const tr=document.createElement('tr');
     tr.className = fim ? 'linha-finalizado' : 'linha-pendente';
     tr.innerHTML = `<td>${esc(m.id)}</td><td>${esc(m.nome)}</td><td>${rotaHtml}</td>
@@ -529,22 +546,25 @@ function montarMesmaRota(d){
   });
 }
 
-function montarMoto(d, ehMoto){
+// Mostra o detalhamento por cluster SEMPRE que houver contagem em parênteses
+// (vale para moto e para fiorino/passeio que vierem nesse formato)
+function montarPacotes(info, ehMoto){
   const box=$('motoBox'), div=$('clustersMoto'), bar=$('totalMotoBar');
+  const titulo = box.querySelector('.titulo');
   div.innerHTML='';
-  const lista = ehMoto ? clustersMoto(d.cluster) : [];
-  if(!ehMoto || !lista.length){ box.style.display='none'; bar.innerText='TOTAL: 0 PACOTES'; return; }
+  if(!info.temParen){ box.style.display='none'; bar.innerText='TOTAL: 0 PACOTES'; return; }
   box.style.display='block';
+  if(titulo) titulo.innerHTML = ehMoto ? '🏍️ PACOTES DA MOTO PARA PASSAR' : '📦 PACOTES POR CLUSTER PARA PASSAR';
   let total=0;
-  lista.forEach(c=>{
-    const q=Number(String(c.pacotes||'0').replace(/\D/g,''))||0; total+=q;
+  info.clusters.forEach(c=>{
+    const q=Number(c.pacotes)||0; total+=q;
     const card=document.createElement('div'); card.className='cluster-card';
     card.innerHTML=`<h2>${esc(c.cluster)}</h2><p>${q} PACOTES</p>`;
     div.appendChild(card);
   });
-  bar.innerText=`TOTAL DA MOTO: ${total} PACOTES`;
+  bar.innerText=`TOTAL: ${total} PACOTES`;
   const tc=document.createElement('div'); tc.className='cluster-card cluster-total';
-  tc.innerHTML=`<h2>TOTAL DA MOTO</h2><p>${total} PACOTES</p>`; div.appendChild(tc);
+  tc.innerHTML=`<h2>TOTAL</h2><p>${total} PACOTES</p>`; div.appendChild(tc);
 }
 
 /* ---- FINALIZAR ---- */
