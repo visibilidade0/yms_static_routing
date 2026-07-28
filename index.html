@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Hub Jardim Adriana — Check-in & YMS</title>
+
+<!-- Firebase (compat, sem build) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<!-- Leitor de código de barras -->
+<script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+<!-- Leitor de planilhas (Excel/CSV) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c2230; --line:#2a313c;
+    --txt:#e6edf3; --muted:#8b98a5; --accent:#2f81f7; --accent2:#1f6feb;
+    --ok:#2ea043; --ok-bg:#0f2417; --warn:#d29922; --warn-bg:#2a2312;
+    --err:#f85149; --err-bg:#2a1416; --pend:#8b98a5; --pend-bg:#1c2230;
+    --radius:12px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  button{font-family:inherit;cursor:pointer}
+  input,select,textarea{font-family:inherit}
+  a{color:var(--accent)}
+
+  .hidden{display:none !important}
+  .center{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px}
+
+  /* ---- Cartão de login ---- */
+  .card{width:100%;max-width:400px;background:var(--panel);border:1px solid var(--line);
+    border-radius:16px;padding:26px 22px;}
+  .card h1{font-size:20px;margin:0 0 4px}
+  .card p.sub{color:var(--muted);margin:0 0 20px;font-size:13px}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+  .field input, .field select{width:100%;background:var(--bg);color:var(--txt);
+    border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:15px}
+  .field input:focus, .field select:focus{outline:2px solid var(--accent);border-color:var(--accent)}
+  .btn{width:100%;background:var(--accent);color:#fff;border:none;border-radius:10px;
+    padding:12px;font-size:15px;font-weight:600;margin-top:6px}
+  .btn:hover{background:var(--accent2)}
+  .btn.sec{background:transparent;border:1px solid var(--line);color:var(--txt)}
+  .btn.sec:hover{background:var(--panel2)}
+  .btn.danger{background:var(--err)} .btn.danger:hover{filter:brightness(1.1)}
+  .btn.small{width:auto;padding:7px 12px;font-size:13px;margin:0}
+  .link{background:none;border:none;color:var(--accent);font-size:13px;padding:8px 0;width:100%}
+  .msg{font-size:13px;padding:10px 12px;border-radius:10px;margin-top:12px}
+  .msg.err{background:var(--err-bg);color:var(--err)}
+  .msg.ok{background:var(--ok-bg);color:var(--ok)}
+  .msg.warn{background:var(--warn-bg);color:var(--warn)}
+
+  /* ---- App ---- */
+  header{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1px solid var(--line);
+    padding:10px 14px;display:flex;align-items:center;gap:10px;padding-top:calc(10px + env(safe-area-inset-top))}
+  header .brand{font-weight:700;font-size:15px}
+  header .who{margin-left:auto;text-align:right;font-size:12px;color:var(--muted);line-height:1.3}
+  header .who b{color:var(--txt);font-size:13px}
+  .role-tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.4px;
+    padding:2px 6px;border-radius:20px;text-transform:uppercase}
+  .role-admin{background:#12233b;color:#58a6ff}
+  .role-bipador{background:#1a2b1a;color:#5fbf5f}
+
+  nav.tabs{display:flex;gap:4px;overflow-x:auto;background:var(--panel);border-bottom:1px solid var(--line);
+    padding:0 8px;position:sticky;top:0;z-index:15}
+  nav.tabs button{background:none;border:none;color:var(--muted);padding:12px 14px;font-size:13px;
+    font-weight:600;border-bottom:2px solid transparent;white-space:nowrap}
+  nav.tabs button.active{color:var(--txt);border-bottom-color:var(--accent)}
+
+  main{padding:14px;max-width:1000px;margin:0 auto;padding-bottom:60px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+  .panel h2{margin:0 0 4px;font-size:16px}
+  .panel .hint{color:var(--muted);font-size:12px;margin:0 0 14px}
+
+  .stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .stat{flex:1;min-width:90px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .stat .n{font-size:22px;font-weight:700}
+  .stat .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .stat.ok .n{color:var(--ok)} .stat.pend .n{color:var(--warn)}
+
+  /* letras */
+  .letras{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .letras button{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    border-radius:8px;padding:8px 12px;font-weight:700;font-size:13px}
+  .letras button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .letras button .c{font-size:11px;color:var(--muted);font-weight:500;margin-left:4px}
+  .letras button.active .c{color:#dbeafe}
+
+  .lista{display:flex;flex-direction:column;gap:6px}
+  .mot{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:10px;padding:9px 11px}
+  .mot .info{flex:1;min-width:0}
+  .mot .info .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .mot .info .nome{font-weight:600;font-size:14px}
+  .mot .info .id{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .mot .info .sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .badge{font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap}
+  .b-ok{background:var(--ok-bg);color:var(--ok)}
+  .b-pend{background:var(--pend-bg);color:var(--pend)}
+  .b-fim{background:#12233b;color:#58a6ff}
+  .hora{font-size:11px;color:var(--muted);margin-top:2px}
+
+  textarea{width:100%;min-height:150px;background:var(--bg);color:var(--txt);border:1px solid var(--line);
+    border-radius:10px;padding:11px;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+  .dropzone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+    background:var(--bg);border:2px dashed var(--line);border-radius:12px;padding:26px 16px;cursor:pointer;
+    text-align:center;transition:border-color .15s,background .15s}
+  .dropzone:hover,.dropzone.drag{border-color:var(--accent);background:var(--panel2)}
+  .dropzone .dz-icon{font-size:28px}
+  .dropzone .dz-txt{font-weight:600;font-size:14px}
+  .dropzone .dz-sub{font-size:12px;color:var(--muted)}
+  .prev-tbl{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px}
+  .prev-tbl td,.prev-tbl th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+  .prev-tbl th{color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.4px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .row .field{flex:1;min-width:140px;margin-bottom:0}
+  .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin:12px 0}
+  .chk input{width:18px;height:18px}
+
+  /* scanner */
+  #scanWrap{position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:3/4;max-width:480px;margin:0 auto}
+  #scanWrap video{width:100%;height:100%;object-fit:cover;display:block}
+  .scan-frame{position:absolute;inset:18% 12%;border:3px solid rgba(255,255,255,.85);border-radius:12px;
+    box-shadow:0 0 0 2000px rgba(0,0,0,.25)}
+  .scan-feedback{position:absolute;left:0;right:0;bottom:0;padding:14px;font-weight:700;text-align:center;font-size:15px}
+  .fb-ok{background:rgba(46,160,67,.92)} .fb-dup{background:rgba(210,153,34,.92)} .fb-err{background:rgba(248,81,73,.92)}
+  .scan-controls{max-width:480px;margin:12px auto 0}
+
+  table.users{width:100%;border-collapse:collapse;font-size:13px}
+  table.users td,table.users th{padding:9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+  table.users th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  .u-actions{display:flex;gap:6px;flex-wrap:wrap}
+
+  /* modal */
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;
+    z-index:50;padding:20px}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;max-width:420px;width:100%;
+    max-height:80dvh;overflow:auto}
+  .modal h3{margin:0 0 12px;font-size:16px}
+  .rank-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .rank-row b{font-variant-numeric:tabular-nums}
+
+  .empty{text-align:center;color:var(--muted);padding:30px 10px;font-size:13px}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel2);
+    border:1px solid var(--line);color:var(--txt);padding:11px 16px;border-radius:10px;font-size:13px;z-index:60;
+    box-shadow:0 6px 24px rgba(0,0,0,.4);max-width:90vw}
+
+  @media (prefers-reduced-motion:no-preference){
+    .toast{animation:up .2s ease}
+    @keyframes up{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+  }
+</style>
+</head>
+<body>
+
+<!-- =========================================================
+     1) AVISO DE CONFIGURAÇÃO (aparece se o firebaseConfig não foi preenchido)
+     ========================================================= -->
+<div id="setupWarn" class="center hidden">
+  <div class="card">
+    <h1>Falta configurar o Firebase</h1>
+    <p class="sub">Abra este arquivo e cole os dados do seu projeto no bloco <b>firebaseConfig</b> (topo do &lt;script&gt;).</p>
+    <div class="msg warn">Console do Firebase → Configurações do projeto → Seus apps → Web → copiar o objeto <b>firebaseConfig</b>.</div>
+  </div>
+</div>
+
+<!-- =========================================================
+     2) LOGIN / CADASTRO
+     ========================================================= -->
+<div id="authScreen" class="center hidden">
+  <div class="card">
+    <h1 id="authTitle">Entrar</h1>
+    <p class="sub" id="authSub">Hub Jardim Adriana — Check-in & YMS</p>
+
+    <div id="fieldNome" class="field hidden">
+      <label>Nome</label>
+      <input id="inNome" type="text" autocomplete="name" placeholder="Seu nome" />
+    </div>
+    <div class="field">
+      <label>E-mail</label>
+      <input id="inEmail" type="email" autocomplete="email" placeholder="voce@empresa.com" />
+    </div>
+    <div class="field">
+      <label>Senha</label>
+      <input id="inSenha" type="password" autocomplete="current-password" placeholder="••••••••" />
+    </div>
+
+    <button id="btnEntrar" class="btn">Entrar</button>
+    <button id="btnCadastrar" class="btn hidden">Criar conta</button>
+    <button id="btnToggle" class="link">Não tem conta? Cadastrar</button>
+    <div id="authMsg"></div>
+  </div>
+</div>
+
+<!-- =========================================================
+     3) AGUARDANDO APROVAÇÃO
+     ========================================================= -->
+<div id="waitScreen" class="center hidden">
+  <div class="card">
+    <h1>Conta aguardando aprovação</h1>
+    <p class="sub">Um administrador precisa liberar seu acesso. Assim que aprovarem, é só entrar de novo.</p>
+    <button id="btnSairWait" class="btn sec">Sair</button>
+  </div>
+</div>
+
+<!-- =========================================================
+     4) APP
+     ========================================================= -->
+<div id="app" class="hidden">
+  <header>
+    <span class="brand">🚚 Hub Jardim Adriana</span>
+    <div class="who">
+      <b id="whoNome">—</b><br />
+      <span id="whoRole" class="role-tag"></span>
+    </div>
+    <button id="btnSair" class="btn sec small" style="margin-left:10px">Sair</button>
+  </header>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <main>
+    <!-- CHECK-IN (scanner) -->
+    <section id="secCheckin" class="tabpage">
+      <div class="panel">
+        <h2>Check-in por código de barras</h2>
+        <p class="hint">Mire no código de barras do motorista. Ao ler, o horário de chegada é registrado e o status vira “no hub”.</p>
+        <div id="scanWrap">
+          <video id="video" playsinline muted></video>
+          <div class="scan-frame"></div>
+          <div id="scanFb" class="scan-feedback hidden"></div>
+        </div>
+        <div class="scan-controls">
+          <div class="row" style="margin-top:12px">
+            <div class="field" style="flex:1">
+              <label>Ou digite o ID manualmente</label>
+              <input id="inManual" type="text" inputmode="numeric" placeholder="ID do motorista" />
+            </div>
+            <button id="btnManual" class="btn small" style="height:44px">Registrar</button>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button id="btnCam" class="btn sec">Iniciar câmera</button>
+            <button id="btnTrocaCam" class="btn sec">Trocar câmera</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel" id="statusMini"></div>
+    </section>
+
+    <!-- STATUS por letra -->
+    <section id="secStatus" class="tabpage hidden">
+      <div class="panel">
+        <h2>Motoristas do dia</h2>
+        <p class="hint">Separados pela primeira letra da rota (A-2+A-2 → letra A). Atualiza em tempo real.</p>
+        <div class="stats" id="statusStats"></div>
+        <div class="letras" id="letras"></div>
+        <div class="lista" id="listaStatus"></div>
+      </div>
+    </section>
+
+    <!-- IMPORTAR (admin) -->
+    <section id="secImport" class="tabpage hidden">
+      <div class="panel">
+        <h2>Importar motoristas do dia</h2>
+        <p class="hint">Selecione a planilha (<b>.xlsx</b>, <b>.xls</b> ou <b>.csv</b>). Colunas:
+          <b>ID • Nome • Cluster • Veículo • Telefone</b> (nessa ordem, ou com cabeçalho nomeado). A primeira aba do arquivo é usada.</p>
+
+        <label id="dropZone" for="fileImport" class="dropzone">
+          <div class="dz-icon">📄</div>
+          <div class="dz-txt">Clique para escolher o arquivo</div>
+          <div class="dz-sub">.xlsx · .xls · .csv</div>
+        </label>
+        <input id="fileImport" type="file" accept=".xlsx,.xls,.csv" class="hidden" />
+        <div id="previewImport"></div>
+
+        <label class="chk"><input id="chkReset" type="checkbox" checked />
+          Reiniciar status de check-in (marcar como novo dia)</label>
+        <div class="row">
+          <button id="btnImportar" class="btn" style="flex:1" disabled>Importar</button>
+          <button id="btnLimparDia" class="btn danger" style="flex:1">Limpar operação do dia</button>
+        </div>
+        <div id="importMsg"></div>
+      </div>
+      <div class="panel">
+        <h2>Base salva</h2>
+        <p class="hint">Banco permanente com todos os motoristas já importados alguma vez. É daqui que a troca puxa pelo ID.</p>
+        <div class="stat" style="max-width:180px"><div class="n" id="baseCount">—</div><div class="l">motoristas na base</div></div>
+      </div>
+    </section>
+
+    <!-- SUBSTITUIR (admin) -->
+    <section id="secTroca" class="tabpage hidden">
+      <div class="panel">
+        <h2>Substituir motorista</h2>
+        <p class="hint">Quando alguém não comparece: informe o ID de quem sai e o ID de quem entra.
+          O novo é puxado da base salva — não precisa redigitar os dados dele.</p>
+        <div class="row">
+          <div class="field"><label>ID que sai (remover do dia)</label><input id="inSai" type="text" inputmode="numeric" placeholder="ID atual" /></div>
+          <div class="field"><label>ID que entra (da base)</label><input id="inEntra" type="text" inputmode="numeric" placeholder="Novo ID" /></div>
+        </div>
+        <button id="btnTrocar" class="btn">Substituir</button>
+        <div id="trocaMsg"></div>
+      </div>
+    </section>
+
+    <!-- YMS -->
+    <section id="secYms" class="tabpage hidden">
+      <div class="panel">
+        <h2>YMS — Mesas</h2>
+        <p class="hint">Puxa os mesmos motoristas importados. Escolha sua mesa, informe o ID e finalize a liberação.</p>
+        <div class="row">
+          <div class="field" style="max-width:160px"><label>Minha mesa</label>
+            <select id="selMesa"></select></div>
+          <div class="field" style="flex:1"><label>ID do motorista</label>
+            <input id="inYmsId" type="text" inputmode="numeric" placeholder="ID" /></div>
+          <button id="btnYmsBuscar" class="btn small" style="height:44px">Buscar</button>
+          <button id="btnRanking" class="btn sec small" style="height:44px">Ranking</button>
+        </div>
+        <div id="ymsResultado"></div>
+      </div>
+    </section>
+
+    <!-- USUÁRIOS (admin) -->
+    <section id="secUsers" class="tabpage hidden">
+      <div class="panel">
+        <h2>Usuários & permissões</h2>
+        <p class="hint">Aprove quem pode entrar e defina o nível: <b>Admin</b> (tudo) ou <b>Bipador</b> (só o check-in).</p>
+        <div id="usersWrap"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+/* ==================================================================
+   CONFIGURAÇÃO DO FIREBASE  —  COLE OS SEUS DADOS AQUI
+   Console → Configurações do projeto → Seus apps → Web → firebaseConfig
+   ================================================================== */
+const firebaseConfig = {
+  apiKey:            "AIzaSyBtq7JwlkxLKKAhs5TUmKHa_78db6tTaUM",
+  authDomain:        "yms--static-rounting.firebaseapp.com",
+  projectId:         "yms--static-rounting",
+  storageBucket:     "yms--static-rounting.firebasestorage.app",
+  messagingSenderId: "119446994843",
+  appId:             "1:119446994843:web:39d5182ce05ab20d2aeb3e"
+};
+
+/* ================================================================== */
+
+const NAO_CONFIGURADO = firebaseConfig.apiKey === "COLE_AQUI";
+if (NAO_CONFIGURADO) {
+  document.getElementById('setupWarn').classList.remove('hidden');
+} else {
+  firebase.initializeApp(firebaseConfig);
+}
+
+const auth = NAO_CONFIGURADO ? null : firebase.auth();
+const db   = NAO_CONFIGURADO ? null : firebase.firestore();
+const FV   = firebase.firestore ? firebase.firestore.FieldValue : null;
+
+// Coleções
+const C_USERS = 'usuarios';
+const C_BASE  = 'motoristas';   // banco permanente
+const C_OP    = 'operacao';     // dia atual (com status)
+
+// Estado
+let usuarioAtual = null;      // {uid, nome, email, role, aprovado}
+let opCache = {};             // id -> dados (tempo real)
+let letraSel = 'TODAS';
+let unsubOp = null, unsubUsers = null;
+let codeReader = null, camAtual = null, camList = [], camIdx = 0;
+const ultimoBip = {};        // debounce
+
+/* ---------- utilidades ---------- */
+const $ = id => document.getElementById(id);
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function san(v){ return String(v==null?'':v).trim().replace(/[\/\\.#$\[\]\s]+/g,'_'); }
+function primeiraLetra(cluster){
+  const m = String(cluster||'').toUpperCase().match(/[A-Z]/);
+  return m ? m[0] : '?';
+}
+function limpaRota(r){ return String(r||'').replace(/\s+/g,'').toUpperCase(); }
+function agoraHora(ts){
+  if(!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+function toast(txt){
+  const t = document.createElement('div'); t.className='toast'; t.textContent=txt;
+  document.body.appendChild(t); setTimeout(()=>t.remove(),2600);
+}
+function beep(freq){
+  try{ const c=new (window.AudioContext||window.webkitAudioContext)();
+    const o=c.createOscillator(), g=c.createGain();
+    o.frequency.value=freq||880; o.connect(g); g.connect(c.destination);
+    o.start(); g.gain.setValueAtTime(.18,c.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.14); o.stop(c.currentTime+.15);
+  }catch(e){}
+}
+
+/* ==================================================================
+   AUTENTICAÇÃO
+   ================================================================== */
+let modoCadastro = false;
+function setAuthMode(cad){
+  modoCadastro = cad;
+  $('authTitle').textContent = cad ? 'Criar conta' : 'Entrar';
+  $('fieldNome').classList.toggle('hidden', !cad);
+  $('btnEntrar').classList.toggle('hidden', cad);
+  $('btnCadastrar').classList.toggle('hidden', !cad);
+  $('btnToggle').textContent = cad ? 'Já tem conta? Entrar' : 'Não tem conta? Cadastrar';
+  $('authMsg').innerHTML='';
+}
+function authMsg(txt, tipo){ $('authMsg').innerHTML = `<div class="msg ${tipo}">${esc(txt)}</div>`; }
+
+if(!NAO_CONFIGURADO){
+  $('btnToggle').onclick = ()=> setAuthMode(!modoCadastro);
+
+  $('btnEntrar').onclick = async ()=>{
+    const email=$('inEmail').value.trim(), senha=$('inSenha').value;
+    if(!email||!senha) return authMsg('Preencha e-mail e senha.','err');
+    $('btnEntrar').disabled=true;
+    try{ await auth.signInWithEmailAndPassword(email,senha); }
+    catch(e){ authMsg(traduzErro(e),'err'); }
+    finally{ $('btnEntrar').disabled=false; }
+  };
+
+  $('btnCadastrar').onclick = async ()=>{
+    const nome=$('inNome').value.trim(), email=$('inEmail').value.trim(), senha=$('inSenha').value;
+    if(!nome||!email||!senha) return authMsg('Preencha nome, e-mail e senha.','err');
+    if(senha.length<6) return authMsg('A senha precisa ter ao menos 6 caracteres.','err');
+    $('btnCadastrar').disabled=true;
+    try{
+      const cred = await auth.createUserWithEmailAndPassword(email,senha);
+      await db.collection(C_USERS).doc(cred.user.uid).set({
+        nome, email, role:'pendente', aprovado:false, criadoEm: FV.serverTimestamp()
+      });
+      // onAuthStateChanged cuida do resto (tela de aguardando)
+    }catch(e){ authMsg(traduzErro(e),'err'); }
+    finally{ $('btnCadastrar').disabled=false; }
+  };
+
+  $('btnSair').onclick = ()=> auth.signOut();
+  $('btnSairWait').onclick = ()=> auth.signOut();
+
+  auth.onAuthStateChanged(async (user)=>{
+    pararCamera();
+    if(unsubOp){unsubOp();unsubOp=null;} if(unsubUsers){unsubUsers();unsubUsers=null;}
+    if(!user){ mostrarTela('authScreen'); return; }
+    let snap;
+    try{ snap = await db.collection(C_USERS).doc(user.uid).get(); }
+    catch(e){ authMsg('Erro ao ler seu cadastro: '+e.message,'err'); mostrarTela('authScreen'); return; }
+    if(!snap.exists){ await auth.signOut(); return; }
+    const u = snap.data();
+    if(!u.aprovado){ mostrarTela('waitScreen'); return; }
+    usuarioAtual = {uid:user.uid, ...u};
+    iniciarApp();
+  });
+}
+
+function traduzErro(e){
+  const m = (e && e.code) || '';
+  if(m.includes('invalid-credential')||m.includes('wrong-password')||m.includes('user-not-found')) return 'E-mail ou senha incorretos.';
+  if(m.includes('email-already-in-use')) return 'Este e-mail já tem conta.';
+  if(m.includes('invalid-email')) return 'E-mail inválido.';
+  if(m.includes('too-many-requests')) return 'Muitas tentativas. Aguarde um pouco.';
+  if(m.includes('network')) return 'Sem conexão com a internet.';
+  return (e && e.message) || 'Erro inesperado.';
+}
+
+function mostrarTela(id){
+  ['setupWarn','authScreen','waitScreen','app'].forEach(t=>$(t).classList.add('hidden'));
+  $(id).classList.remove('hidden');
+}
+
+/* ==================================================================
+   APP — navegação por papel
+   ================================================================== */
+const ABAS = [
+  {id:'secCheckin', tab:'Check-in', admin:false},
+  {id:'secStatus',  tab:'Status',   admin:false},
+  {id:'secImport',  tab:'Importar', admin:true},
+  {id:'secTroca',   tab:'Substituir',admin:true},
+  {id:'secUsers',   tab:'Usuários',  admin:true},
+];
+
+function iniciarApp(){
+  mostrarTela('app');
+  const isAdmin = usuarioAtual.role === 'admin';
+  $('whoNome').textContent = usuarioAtual.nome || usuarioAtual.email;
+  const rt = $('whoRole');
+  rt.textContent = isAdmin ? 'Admin' : 'Bipador';
+  rt.className = 'role-tag ' + (isAdmin ? 'role-admin' : 'role-bipador');
+
+  // monta abas conforme papel
+  const tabs = $('tabs'); tabs.innerHTML='';
+  ABAS.filter(a=>isAdmin || !a.admin).forEach((a,i)=>{
+    const b=document.createElement('button');
+    b.textContent=a.tab; b.dataset.sec=a.id;
+    b.onclick=()=>abrirAba(a.id);
+    tabs.appendChild(b);
+  });
+
+  montarMesas();
+  ouvirOperacao();
+  if(isAdmin){ ouvirUsuarios(); ouvirBaseCount(); }
+  abrirAba('secCheckin');
+}
+
+function abrirAba(id){
+  document.querySelectorAll('.tabpage').forEach(s=>s.classList.add('hidden'));
+  $(id).classList.remove('hidden');
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.sec===id));
+  // câmera só liga na aba de check-in
+  if(id==='secCheckin'){ /* usuário liga manualmente */ } else { pararCamera(); }
+}
+
+/* ==================================================================
+   OPERAÇÃO EM TEMPO REAL
+   ================================================================== */
+function ouvirOperacao(){
+  unsubOp = db.collection(C_OP).onSnapshot(snap=>{
+    opCache = {};
+    snap.forEach(d=> opCache[d.id] = {docId:d.id, ...d.data()});
+    renderStatus();
+    renderStatusMini();
+  }, err=> toast('Erro na operação: '+err.message));
+}
+
+function listaOrdenada(){
+  return Object.values(opCache).sort((a,b)=>{
+    const la=(a.letra||'?'), lb=(b.letra||'?');
+    if(la!==lb) return la.localeCompare(lb);
+    return String(a.cluster||'').localeCompare(String(b.cluster||''));
+  });
+}
+function checkinDe(d){ return d.checkin || 'pendente'; }
+
+function renderStatus(){
+  const todos = listaOrdenada();
+  const noHub = todos.filter(d=>checkinDe(d)==='no_hub').length;
+  const pend  = todos.length - noHub;
+
+  $('statusStats').innerHTML = `
+    <div class="stat"><div class="n">${todos.length}</div><div class="l">Total do dia</div></div>
+    <div class="stat ok"><div class="n">${noHub}</div><div class="l">No hub</div></div>
+    <div class="stat pend"><div class="n">${pend}</div><div class="l">Pendentes</div></div>`;
+
+  // letras
+  const porLetra = {};
+  todos.forEach(d=>{ const l=d.letra||'?'; (porLetra[l]=porLetra[l]||[]).push(d); });
+  const letras = Object.keys(porLetra).sort();
+  const box = $('letras'); box.innerHTML='';
+  const mkBtn=(l,arr)=>{
+    const nh = arr.filter(d=>checkinDe(d)==='no_hub').length;
+    const b=document.createElement('button');
+    b.className = (letraSel===l?'active':'');
+    b.innerHTML = `${l==='TODAS'?'Todas':l} <span class="c">${nh}/${arr.length}</span>`;
+    b.onclick=()=>{ letraSel=l; renderStatus(); };
+    return b;
+  };
+  box.appendChild(mkBtn('TODAS', todos));
+  letras.forEach(l=> box.appendChild(mkBtn(l, porLetra[l])));
+
+  const filtrados = letraSel==='TODAS' ? todos : (porLetra[letraSel]||[]);
+  $('listaStatus').innerHTML = filtrados.length
+    ? filtrados.map(linhaMotorista).join('')
+    : '<div class="empty">Nenhum motorista importado ainda.</div>';
+}
+
+function linhaMotorista(d){
+  const noHub = checkinDe(d)==='no_hub';
+  const fim = d.ymsStatus==='finalizado';
+  const badge = fim ? `<span class="badge b-fim">Finalizado</span>`
+             : noHub ? `<span class="badge b-ok">No hub</span>`
+                     : `<span class="badge b-pend">Pendente</span>`;
+  const hora = noHub && d.horaCheckin ? `<div class="hora">Chegou: ${agoraHora(d.horaCheckin)}</div>` : '';
+  return `<div class="mot">
+    <div class="info">
+      <div class="top"><span class="nome">${esc(d.nome||'—')}</span><span class="id">#${esc(d.id||d.docId)}</span></div>
+      <div class="sub">${esc(d.cluster||'')} · ${esc(d.veiculo||'')}${d.telefone?' · '+esc(d.telefone):''}</div>
+      ${hora}
+    </div>${badge}
+  </div>`;
+}
+
+function renderStatusMini(){
+  const todos = Object.values(opCache);
+  const noHub = todos.filter(d=>checkinDe(d)==='no_hub').length;
+  const box = $('statusMini');
+  if(!todos.length){ box.innerHTML='<div class="empty">Importe os motoristas do dia para começar.</div>'; return; }
+  const porLetra={}; todos.forEach(d=>{const l=d.letra||'?';(porLetra[l]=porLetra[l]||[]).push(d);});
+  const letras = Object.keys(porLetra).sort();
+  box.innerHTML = `<div class="stats">
+      <div class="stat ok"><div class="n">${noHub}</div><div class="l">No hub</div></div>
+      <div class="stat pend"><div class="n">${todos.length-noHub}</div><div class="l">Faltam</div></div>
+    </div>
+    <div class="letras">` + letras.map(l=>{
+      const nh=porLetra[l].filter(d=>checkinDe(d)==='no_hub').length;
+      return `<button style="cursor:default">${l} <span class="c">${nh}/${porLetra[l].length}</span></button>`;
+    }).join('') + `</div>`;
+}
+
+/* ==================================================================
+   CHECK-IN — scanner
+   ================================================================== */
+async function iniciarCamera(){
+  if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
+  try{
+    if(!camList.length){
+      const devs = await codeReader.listVideoInputDevices();
+      camList = devs;
+      // tenta câmera traseira
+      camIdx = Math.max(0, devs.findIndex(d=>/back|traseira|rear|environment/i.test(d.label)));
+    }
+    camAtual = camList.length ? camList[camIdx].deviceId : undefined;
+    await codeReader.decodeFromVideoDevice(camAtual, 'video', (result)=>{
+      if(result) processarBip(result.getText());
+    });
+    $('btnCam').textContent='Parar câmera';
+  }catch(e){
+    toast('Não foi possível abrir a câmera: '+e.message);
+  }
+}
+function pararCamera(){
+  if(codeReader){ try{ codeReader.reset(); }catch(e){} }
+  const b=$('btnCam'); if(b) b.textContent='Iniciar câmera';
+}
+if(!NAO_CONFIGURADO){
+  $('btnCam').onclick = ()=>{
+    if($('btnCam').textContent.startsWith('Parar')) pararCamera();
+    else iniciarCamera();
+  };
+  $('btnTrocaCam').onclick = async ()=>{
+    if(!camList.length) return iniciarCamera();
+    camIdx = (camIdx+1)%camList.length;
+    pararCamera(); await iniciarCamera();
+  };
+  $('btnManual').onclick = ()=>{ const v=$('inManual').value.trim(); if(v){ processarBip(v); $('inManual').value=''; } };
+  $('inManual').addEventListener('keydown',e=>{ if(e.key==='Enter') $('btnManual').click(); });
+}
+
+let bipLock=false;
+async function processarBip(codigo){
+  const raw = String(codigo||'').trim();
+  if(!raw) return;
+  const key = raw.toUpperCase();
+  const t = Date.now();
+  if(ultimoBip[key] && (t-ultimoBip[key])<3000) return; // debounce
+  ultimoBip[key]=t;
+  if(bipLock) return; bipLock=true;
+  try{
+    const idDoc = san(raw);
+    let ref = db.collection(C_OP).doc(idDoc);
+    let doc = await ref.get();
+    if(!doc.exists){
+      // fallback: procura pelo campo id original
+      const q = await db.collection(C_OP).where('id','==',raw).limit(1).get();
+      if(!q.empty){ doc=q.docs[0]; ref=doc.ref; }
+    }
+    if(!doc.exists){ feedbackScan('err', `ID ${raw} não está na operação de hoje`); beep(300); return; }
+    const d = doc.data();
+    if(checkinDe(d)==='no_hub'){ feedbackScan('dup', `${d.nome||raw} já fez check-in (${agoraHora(d.horaCheckin)})`); beep(520); return; }
+    await ref.update({ checkin:'no_hub', horaCheckin: FV.serverTimestamp(), checkinPor: usuarioAtual.nome||usuarioAtual.email });
+    feedbackScan('ok', `${d.nome||raw} — no hub ✓`); beep(880);
+  }catch(e){ feedbackScan('err', 'Erro: '+e.message); }
+  finally{ setTimeout(()=>bipLock=false, 400); }
+}
+function feedbackScan(tipo, txt){
+  const fb=$('scanFb');
+  fb.className='scan-feedback ' + ({ok:'fb-ok',dup:'fb-dup',err:'fb-err'}[tipo]);
+  fb.textContent=txt; fb.classList.remove('hidden');
+  clearTimeout(fb._t); fb._t=setTimeout(()=>fb.classList.add('hidden'), 2200);
+}
+
+/* ==================================================================
+   IMPORTAR (admin)
+   ================================================================== */
+let filaImport = [];   // motoristas lidos do arquivo, aguardando o botão Importar
+
+function norm(s){ return String(s==null?'':s).trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+
+// Lê a planilha e devolve lista {id,nome,cluster,veiculo,telefone}
+function parsePlanilha(matriz){
+  const out=[];
+  if(!matriz.length) return out;
+
+  // detecta cabeçalho nomeado
+  const primeira = matriz[0].map(norm);
+  const temCab = primeira.includes('ID') && (primeira.includes('NOME') || primeira.includes('CLUSTER'));
+  let idx = {id:0, nome:1, cluster:2, veiculo:3, telefone:4};
+  let inicio = 0;
+  if(temCab){
+    const acha = (...alt)=>{ for(const a of alt){ const i=primeira.indexOf(a); if(i>=0) return i; } return -1; };
+    idx = {
+      id: acha('ID'), nome: acha('NOME'), cluster: acha('CLUSTER','ROTA'),
+      veiculo: acha('VEICULO','VEÍCULO','TIPO','TIPO DE VEICULO'), telefone: acha('TELEFONE','FONE','CELULAR')
+    };
+    inicio = 1;
+  }
+  const cel=(row,i)=> (i>=0 && row[i]!=null) ? String(row[i]).trim() : '';
+  for(let r=inicio; r<matriz.length; r++){
+    const row = matriz[r]; if(!row) continue;
+    const id = cel(row, idx.id);
+    if(!id) continue;
+    out.push({
+      id,
+      nome: cel(row, idx.nome),
+      cluster: cel(row, idx.cluster),
+      veiculo: cel(row, idx.veiculo),
+      telefone: cel(row, idx.telefone)
+    });
+  }
+  return out;
+}
+
+function lerArquivo(file){
+  const reader = new FileReader();
+  reader.onload = e=>{
+    try{
+      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const matriz = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
+      filaImport = parsePlanilha(matriz);
+      mostrarPreview(file.name);
+    }catch(err){ importMsg('Não consegui ler o arquivo: '+err.message,'err'); }
+  };
+  reader.onerror = ()=> importMsg('Erro ao abrir o arquivo.','err');
+  reader.readAsArrayBuffer(file);
+}
+
+function mostrarPreview(nome){
+  const box = $('previewImport');
+  if(!filaImport.length){
+    box.innerHTML = `<div class="msg warn">Nenhum motorista válido em <b>${esc(nome)}</b>. Confira as colunas (ID • Nome • Cluster • Veículo • Telefone).</div>`;
+    $('btnImportar').disabled = true;
+    return;
+  }
+  const amostra = filaImport.slice(0,5).map(m=>`<tr>
+    <td>${esc(m.id)}</td><td>${esc(m.nome)}</td><td>${esc(m.cluster)}</td><td>${esc(m.veiculo)}</td><td>${esc(m.telefone)}</td></tr>`).join('');
+  box.innerHTML = `
+    <div class="msg ok" style="margin-top:12px"><b>${filaImport.length}</b> motoristas lidos de <b>${esc(nome)}</b>. Confira e clique em Importar.</div>
+    <table class="prev-tbl"><thead><tr><th>ID</th><th>Nome</th><th>Cluster</th><th>Veículo</th><th>Telefone</th></tr></thead>
+    <tbody>${amostra}</tbody></table>
+    ${filaImport.length>5?`<div class="hint">…e mais ${filaImport.length-5}.</div>`:''}`;
+  $('btnImportar').disabled = false;
+}
+
+if(!NAO_CONFIGURADO){
+  const dz = $('dropZone'), fi = $('fileImport');
+  fi.onchange = ()=>{ if(fi.files[0]) lerArquivo(fi.files[0]); };
+  dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', ()=> dz.classList.remove('drag'));
+  dz.addEventListener('drop', e=>{ e.preventDefault(); dz.classList.remove('drag'); if(e.dataTransfer.files[0]) lerArquivo(e.dataTransfer.files[0]); });
+
+  $('btnImportar').onclick = async ()=>{
+    const lista = filaImport;
+    if(!lista.length) return importMsg('Nenhum arquivo carregado.','err');
+    const reset = $('chkReset').checked;
+    $('btnImportar').disabled=true; importMsg('Importando '+lista.length+'…','warn');
+    try{
+      let n=0;
+      for(let i=0;i<lista.length;i+=400){
+        const batch = db.batch();
+        lista.slice(i,i+400).forEach(m=>{
+          const id = san(m.id);
+          const letra = primeiraLetra(m.cluster);
+          const base = {id:m.id, nome:m.nome, cluster:m.cluster, veiculo:m.veiculo, telefone:m.telefone, letra};
+          batch.set(db.collection(C_BASE).doc(id), {...base, atualizadoEm:FV.serverTimestamp()}, {merge:true});
+          const op = {...base};
+          if(reset){ op.checkin='pendente'; op.horaCheckin=null; op.ymsStatus='aguardando'; op.mesa=''; op.finalizadoEm=null; }
+          batch.set(db.collection(C_OP).doc(id), op, {merge:true});
+          n++;
+        });
+        await batch.commit();
+      }
+      importMsg(`${n} motoristas importados com sucesso.`,'ok');
+      filaImport = [];
+      $('fileImport').value = '';
+      $('previewImport').innerHTML = '';
+    }catch(e){ importMsg('Erro: '+e.message,'err'); }
+    finally{ $('btnImportar').disabled = filaImport.length===0; }
+  };
+
+  $('btnLimparDia').onclick = async ()=>{
+    if(!confirm('Isso remove TODOS os motoristas da operação de hoje (a base salva continua intacta). Confirmar?')) return;
+    $('btnLimparDia').disabled=true;
+    try{
+      const snap = await db.collection(C_OP).get();
+      const docs = snap.docs;
+      for(let i=0;i<docs.length;i+=400){
+        const batch=db.batch();
+        docs.slice(i,i+400).forEach(d=>batch.delete(d.ref));
+        await batch.commit();
+      }
+      importMsg('Operação do dia limpa.','ok');
+    }catch(e){ importMsg('Erro: '+e.message,'err'); }
+    finally{ $('btnLimparDia').disabled=false; }
+  };
+}
+function importMsg(txt,tipo){ $('importMsg').innerHTML=`<div class="msg ${tipo}">${esc(txt)}</div>`; }
+
+function ouvirBaseCount(){
+  // leitura leve: conta uma vez ao abrir (sem listener contínuo)
+  db.collection(C_BASE).get().then(s=> $('baseCount').textContent = s.size)
+    .catch(()=> $('baseCount').textContent='—');
+}
+
+/* ==================================================================
+   SUBSTITUIR (admin)
+   ================================================================== */
+if(!NAO_CONFIGURADO){
+  $('btnTrocar').onclick = async ()=>{
+    const sai=$('inSai').value.trim(), entra=$('inEntra').value.trim();
+    if(!entra) return trocaMsg('Informe o ID que entra.','err');
+    $('btnTrocar').disabled=true;
+    try{
+      // busca o novo na base salva
+      const baseDoc = await db.collection(C_BASE).doc(san(entra)).get();
+      if(!baseDoc.exists) throw new Error('ID '+entra+' não está na base salva. Importe-o antes.');
+      const nb = baseDoc.data();
+      // adiciona na operação
+      await db.collection(C_OP).doc(san(entra)).set({
+        id:nb.id, nome:nb.nome, cluster:nb.cluster, veiculo:nb.veiculo, telefone:nb.telefone,
+        letra: nb.letra || primeiraLetra(nb.cluster),
+        checkin:'pendente', horaCheckin:null, ymsStatus:'aguardando', mesa:'', finalizadoEm:null
+      }, {merge:true});
+      // remove quem sai
+      if(sai){ await db.collection(C_OP).doc(san(sai)).delete(); }
+      trocaMsg(`Pronto: ${nb.nome||entra} entrou${sai?` no lugar de #${sai}`:''}.`,'ok');
+      $('inSai').value=''; $('inEntra').value='';
+    }catch(e){ trocaMsg(e.message,'err'); }
+    finally{ $('btnTrocar').disabled=false; }
+  };
+}
+function trocaMsg(txt,tipo){ $('trocaMsg').innerHTML=`<div class="msg ${tipo}">${esc(txt)}</div>`; }
+
+/* ==================================================================
+   YMS — mesas
+   ================================================================== */
+function montarMesas(){
+  const sel=$('selMesa'); if(!sel) return; sel.innerHTML='';
+  for(let i=1;i<=30;i++){ const o=document.createElement('option'); o.value='Mesa '+i; o.textContent='Mesa '+i; sel.appendChild(o); }
+  const salvo = localStorage.getItem('ja_mesa'); if(salvo) sel.value=salvo;
+  sel.onchange=()=> localStorage.setItem('ja_mesa', sel.value);
+}
+if(!NAO_CONFIGURADO){
+  $('btnYmsBuscar').onclick = ymsBuscar;
+  $('inYmsId').addEventListener('keydown',e=>{ if(e.key==='Enter') ymsBuscar(); });
+  $('btnRanking').onclick = mostrarRanking;
+}
+async function ymsBuscar(){
+  const id=$('inYmsId').value.trim(); const mesa=$('selMesa').value;
+  if(!id){ $('ymsResultado').innerHTML=''; return; }
+  const d = opCache[san(id)] || Object.values(opCache).find(x=>String(x.id)===id);
+  if(!d){ $('ymsResultado').innerHTML='<div class="msg err">Motorista não está na operação de hoje.</div>'; return; }
+
+  // registra mesa
+  try{ await db.collection(C_OP).doc(d.docId).update({mesa, mesaEm:FV.serverTimestamp()}); }catch(e){}
+
+  // mesma rota
+  const rota = limpaRota(d.cluster);
+  const mesmaRota = Object.values(opCache).filter(x=>x.docId!==d.docId && limpaRota(x.cluster)===rota);
+  // conflito: mesma rota em outra mesa
+  const conflitos = mesmaRota.filter(x=>x.mesa && x.mesa!==mesa);
+
+  const fim = d.ymsStatus==='finalizado';
+  const noHub = checkinDe(d)==='no_hub';
+  $('ymsResultado').innerHTML = `
+    <div class="panel" style="margin-top:14px;background:var(--panel2)">
+      <div class="top" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="nome" style="font-size:17px;font-weight:700">${esc(d.nome||'—')}</span>
+        <span class="id" style="color:var(--muted)">#${esc(d.id)}</span>
+        ${noHub?'<span class="badge b-ok">No hub</span>':'<span class="badge b-pend">Não fez check-in</span>'}
+        ${fim?'<span class="badge b-fim">Finalizado</span>':''}
+      </div>
+      <div class="sub" style="color:var(--muted);margin-top:6px;font-size:13px">
+        Rota <b style="color:var(--txt)">${esc(d.cluster||'')}</b> · ${esc(d.veiculo||'')}${d.telefone?' · '+esc(d.telefone):''}
+      </div>
+      ${conflitos.length?`<div class="msg warn" style="margin-top:12px">⚠ Mesma rota em: ${conflitos.map(c=>esc(c.mesa)).join(', ')}</div>`:''}
+      ${mesmaRota.length?`<div class="hint" style="margin-top:12px">Mesma rota (${mesmaRota.length}): ${mesmaRota.map(c=>esc(c.nome||c.id)).join(', ')}</div>`:''}
+      <button id="btnFinalizar" class="btn ${fim?'sec':''}" style="margin-top:14px" ${fim?'disabled':''}>
+        ${fim?'Já finalizado':'Finalizar liberação ('+esc(mesa)+')'}</button>
+    </div>`;
+  if(!fim){
+    $('btnFinalizar').onclick = async ()=>{
+      try{
+        await db.collection(C_OP).doc(d.docId).update({
+          ymsStatus:'finalizado', finalizadoEm:FV.serverTimestamp(), finalizadoPor:mesa
+        });
+        toast('Motorista finalizado.'); $('inYmsId').value=''; $('ymsResultado').innerHTML='';
+      }catch(e){ toast('Erro: '+e.message); }
+    };
+  }
+}
+function mostrarRanking(){
+  const cont={};
+  for(let i=1;i<=30;i++) cont['Mesa '+i]=0;
+  Object.values(opCache).forEach(d=>{ if(d.ymsStatus==='finalizado' && d.finalizadoPor) cont[d.finalizadoPor]=(cont[d.finalizadoPor]||0)+1; });
+  const linhas = Object.keys(cont).map(m=>({m,n:cont[m]}))
+    .sort((a,b)=> b.n-a.n || a.m.localeCompare(b.m)).filter(x=>x.n>0);
+  const html = linhas.length ? linhas.map((x,i)=>`<div class="rank-row"><span>${i+1}º · ${esc(x.m)}</span><b>${x.n}</b></div>`).join('')
+    : '<div class="empty">Nenhuma liberação finalizada ainda.</div>';
+  abrirModal('Ranking de mesas', html);
+}
+function abrirModal(titulo, html){
+  const bg=document.createElement('div'); bg.className='modal-bg';
+  bg.innerHTML=`<div class="modal"><h3>${esc(titulo)}</h3>${html}<button class="btn sec" style="margin-top:14px">Fechar</button></div>`;
+  bg.onclick=e=>{ if(e.target===bg) bg.remove(); };
+  bg.querySelector('button').onclick=()=>bg.remove();
+  document.body.appendChild(bg);
+}
+
+/* ==================================================================
+   USUÁRIOS (admin)
+   ================================================================== */
+function ouvirUsuarios(){
+  unsubUsers = db.collection(C_USERS).onSnapshot(snap=>{
+    const users=[]; snap.forEach(d=>users.push({uid:d.id, ...d.data()}));
+    users.sort((a,b)=> (a.aprovado?1:0)-(b.aprovado?1:0) || String(a.nome||'').localeCompare(String(b.nome||'')));
+    const rows = users.map(u=>{
+      const eu = u.uid===usuarioAtual.uid;
+      const st = !u.aprovado ? '<span class="badge b-pend">Pendente</span>'
+        : u.role==='admin' ? '<span class="role-tag role-admin">Admin</span>'
+        : '<span class="role-tag role-bipador">Bipador</span>';
+      let acoes='';
+      if(!eu){
+        if(!u.aprovado){
+          acoes = `<button class="btn small" onclick="aprovar('${u.uid}','bipador')">Aprovar Bipador</button>
+                   <button class="btn small sec" onclick="aprovar('${u.uid}','admin')">Aprovar Admin</button>`;
+        }else{
+          acoes = u.role==='admin'
+            ? `<button class="btn small sec" onclick="mudarRole('${u.uid}','bipador')">→ Bipador</button>`
+            : `<button class="btn small sec" onclick="mudarRole('${u.uid}','admin')">→ Admin</button>`;
+          acoes += ` <button class="btn small danger" onclick="revogar('${u.uid}')">Bloquear</button>`;
+        }
+      }else{ acoes='<span style="color:var(--muted);font-size:12px">você</span>'; }
+      return `<tr><td><b>${esc(u.nome||'—')}</b><br><span style="color:var(--muted);font-size:12px">${esc(u.email||'')}</span></td>
+        <td>${st}</td><td><div class="u-actions">${acoes}</div></td></tr>`;
+    }).join('');
+    $('usersWrap').innerHTML = users.length
+      ? `<table class="users"><thead><tr><th>Usuário</th><th>Nível</th><th>Ações</th></tr></thead><tbody>${rows}</tbody></table>`
+      : '<div class="empty">Nenhum usuário ainda.</div>';
+  }, err=> $('usersWrap').innerHTML=`<div class="msg err">${esc(err.message)}</div>`);
+}
+async function aprovar(uid, role){ try{ await db.collection(C_USERS).doc(uid).update({aprovado:true, role}); toast('Aprovado.'); }catch(e){ toast('Erro: '+e.message); } }
+async function mudarRole(uid, role){ try{ await db.collection(C_USERS).doc(uid).update({role}); toast('Nível alterado.'); }catch(e){ toast('Erro: '+e.message); } }
+async function revogar(uid){ if(!confirm('Bloquear o acesso deste usuário?')) return; try{ await db.collection(C_USERS).doc(uid).update({aprovado:false, role:'pendente'}); toast('Bloqueado.'); }catch(e){ toast('Erro: '+e.message); } }
+window.aprovar=aprovar; window.mudarRole=mudarRole; window.revogar=revogar;
+
+/* tela inicial */
+if(!NAO_CONFIGURADO){ setAuthMode(false); mostrarTela('authScreen'); }
+</script>
+</body>
+</html>

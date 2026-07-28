@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>YMS Jardim Adriana</title>
+
+  <!-- Firebase (mesmo projeto do Check-in) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    * { box-sizing: border-box; font-family: Arial, sans-serif; }
+    html, body { margin: 0; width: 100%; min-height: 100%; background: #fff3df; color: #111; }
+    body { overflow-x: hidden; }
+
+    header {
+      background: linear-gradient(135deg, #ff7a00, #ffb347);
+      padding: clamp(16px, 3vh, 28px);
+      text-align: center; color: #000; border-bottom: 6px solid #ff5a00;
+      display: flex; align-items: center; justify-content: center; gap: 16px;
+      padding-top: calc(clamp(16px,3vh,28px) + env(safe-area-inset-top));
+    }
+    header h1 { margin: 0; font-size: clamp(24px, 4vw, 42px); font-weight: 900; }
+    header .sair {
+      background:#111;color:#fff;border:none;border-radius:10px;padding:8px 14px;
+      font-weight:900;cursor:pointer;font-size:14px;box-shadow:none;
+    }
+
+    .container { max-width: 1200px; margin: clamp(14px, 3vh, 25px) auto; padding: 0 18px; }
+
+    .painel { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: clamp(14px, 3vh, 25px); }
+    .card {
+      background: white; border: 3px solid #222; border-radius: 14px; padding: clamp(12px, 2vh, 18px);
+      text-align: center; box-shadow: 0 5px 0 #222; font-weight: 900;
+    }
+    .card span { display: block; font-size: clamp(28px, 4vw, 38px); margin-top: 8px; }
+
+    .mesas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 18px; }
+    .mesa-card {
+      background: #fff; border: 4px solid #222; border-radius: 16px; padding: 22px; text-align: center;
+      font-size: 22px; font-weight: 900; cursor: pointer; box-shadow: 0 6px 0 #222; user-select: none;
+      position: relative;
+    }
+    .mesa-card:hover { background: #ffbb66; transform: translateY(-2px); }
+    .mesa-card .dono-tag {
+      display:block; margin-top:8px; font-size:12px; font-weight:900; color:#8c1d00;
+    }
+    .mesa-card.ocupada { border-color:#ff3300; }
+
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 999; }
+    .modal {
+      background: #fff3df; width: 100vw; height: 100dvh; overflow: hidden; position: relative;
+      display: flex; flex-direction: column;
+    }
+    .modal-header {
+      flex: 0 0 auto; background: linear-gradient(135deg, #ff7a00, #ffb347); border-bottom: 5px solid #222;
+      padding: clamp(10px, 2vh, 18px) clamp(16px, 3vw, 28px);
+      display: grid; grid-template-columns: 1fr auto auto auto; gap: clamp(10px, 2vw, 18px); align-items: center;
+      padding-top: calc(clamp(10px,2vh,18px) + env(safe-area-inset-top));
+    }
+    .modal-header h2 { margin: 0; font-size: clamp(22px, 3vw, 30px); font-weight: 900; white-space: nowrap; }
+    .fechar {
+      background: #111; color: #fff; border: none; border-radius: 10px;
+      padding: clamp(10px, 1.5vh, 12px) clamp(14px, 2vw, 18px); font-size: clamp(16px, 1.8vw, 20px);
+      font-weight: 900; cursor: pointer; white-space: nowrap;
+    }
+    .btn-ranking-topo {
+      width: 76px; height: 64px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+      font-size: 34px; border-radius: 14px; background: #ff3300; color: #fff; border: 3px solid #222; box-shadow: 0 5px 0 #8c1d00; cursor:pointer;
+    }
+    .btn-ranking-topo:hover { background: #ff5a00; transform: translateY(-2px); }
+
+    .resumo-modal { display: flex; gap: 10px; align-items: center; }
+    .resumo-mini {
+      background: #fff; border: 3px solid #222; border-radius: 12px; padding: clamp(5px, 1vh, 8px) 14px;
+      font-size: clamp(13px, 1.5vw, 16px); font-weight: 900; text-align: center; min-width: clamp(95px, 10vw, 120px); box-shadow: 0 4px 0 #222;
+    }
+    .resumo-mini span { display: block; font-size: clamp(22px, 3vw, 28px); margin-top: 2px; }
+
+    .modal-body { flex: 1; min-height: 0; padding: clamp(10px, 2vh, 22px); overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; padding-bottom: 28px; }
+
+    .busca {
+      background: #ffb347; padding: clamp(10px, 1.6vh, 18px); border-radius: 16px; border: 3px solid #222;
+      display: grid; grid-template-columns: minmax(280px, 1fr) minmax(190px, 260px) minmax(230px, 300px);
+      gap: clamp(10px, 1.5vw, 16px); align-items: center; margin-bottom: clamp(8px, 1.5vh, 14px);
+    }
+    .busca input {
+      width: 100%; padding: clamp(12px, 2vh, 18px); font-size: clamp(18px, 2.2vw, 26px); font-weight: bold;
+      border: 3px solid #222; border-radius: 10px; text-align: center;
+    }
+    button {
+      border: none; border-radius: 10px; padding: clamp(12px, 2vh, 18px) clamp(14px, 2vw, 24px);
+      font-size: clamp(15px, 1.8vw, 20px); font-weight: 900; cursor: pointer; background: #ff3300; color: white;
+      box-shadow: 0 5px 0 #8c1d00; white-space: nowrap;
+    }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    button:active { transform: translateY(3px); box-shadow: 0 2px 0 #8c1d00; }
+
+    .msg { display: none; padding: clamp(10px, 1.8vh, 18px); border-radius: 12px; margin-bottom: clamp(8px, 1.5vh, 20px); font-size: clamp(15px, 1.8vw, 20px); font-weight: bold; text-align: center; }
+    .ok { background: #18c964; color: white; }
+    .erro { background: red; color: white; }
+
+    /* Banner de REDIRECIONAMENTO (nova lógica de dono da rota) */
+    .redirect {
+      display: none; position: sticky; top: 0; z-index: 50;
+      background: #ff3300; color: #fff; border: 5px solid #222; border-radius: 16px;
+      padding: clamp(14px, 2.4vh, 24px); margin-bottom: clamp(8px, 1.5vh, 20px);
+      font-size: clamp(18px, 2.4vw, 26px); font-weight: 900; text-align: center; box-shadow: 0 6px 0 #8c1d00;
+      line-height: 1.35;
+    }
+    .redirect .mesa-destino {
+      display:inline-block; background:#fff000; color:#000; border:4px solid #222; border-radius:12px;
+      padding:6px 18px; margin-top:10px; font-size: clamp(24px, 4vw, 40px);
+    }
+
+    .resultado { display: none; background: white; border: 4px solid #222; border-radius: 16px; overflow: hidden; margin-bottom: clamp(8px, 1.5vh, 14px); }
+    .titulo { background: #ff6a00; color: #000; padding: clamp(7px, 1.2vh, 11px); text-align: center; font-size: clamp(17px, 2vw, 24px); font-weight: 900; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #ffbb66; padding: clamp(5px, 1vh, 9px); border: 2px solid #222; font-size: clamp(12px, 1.25vw, 16px); }
+    td { padding: clamp(5px, 1vh, 9px); border: 2px solid #222; text-align: center; font-weight: bold; font-size: clamp(12px, 1.25vw, 16px); word-break: break-word; }
+    .status-falta { background: red; color: white; }
+    .status-finalizado { background: #999; color: white; }
+    .linha-finalizado { opacity: 0.45; background: #ddd; }
+    .linha-pendente { background: #fff; }
+
+    .moto-box { display: none; background: #fff; border: 4px solid #222; border-radius: 16px; margin-bottom: clamp(8px, 1.5vh, 14px); overflow: hidden; }
+    .clusters { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: clamp(8px, 1.4vh, 12px); padding: clamp(10px, 1.8vh, 18px); }
+    .cluster-card { border: 3px solid #222; border-radius: 12px; padding: clamp(12px, 2vh, 24px) clamp(10px, 1.5vw, 18px); text-align: center; background: #ffff00; }
+    .cluster-card h2 { margin: 0; font-size: clamp(22px, 3vw, 34px); }
+    .cluster-card p { margin: 8px 0 0; font-size: clamp(18px, 2.4vw, 26px); font-weight: 900; }
+    .cluster-total { background: #00ff00 !important; grid-column: 1 / -1; }
+    .cluster-total h2 { font-size: clamp(24px, 3.4vw, 38px); }
+    .cluster-total p { font-size: clamp(22px, 3vw, 34px); }
+    .total-moto-bar { background: #00ff00; border-bottom: 4px solid #222; padding: clamp(8px, 1.5vh, 16px); text-align: center; font-size: clamp(20px, 3vw, 34px); font-weight: 900; color: #000; }
+    .pacotes-destaque { margin-top: 8px; display: inline-block; background: #00ff00; border: 3px solid #222; border-radius: 10px; padding: 6px 12px; font-size: clamp(14px, 1.8vw, 24px); font-weight: 900; }
+
+    .ranking-topo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 18px; }
+    .ranking-card { background: #fff; border: 4px solid #222; border-radius: 16px; padding: 18px; text-align: center; box-shadow: 0 6px 0 #222; font-weight: 900; }
+    .ranking-card .posicao { font-size: clamp(28px, 4vw, 46px); display: block; margin-bottom: 8px; }
+    .ranking-card .mesa-rank { font-size: clamp(18px, 2.2vw, 26px); display: block; margin-bottom: 8px; }
+    .ranking-card .qtd-rank { background: #00ff00; border: 3px solid #222; border-radius: 12px; display: inline-block; padding: 8px 14px; font-size: clamp(16px, 2vw, 24px); }
+    .linha-rank-1 { background: #fff000; } .linha-rank-2 { background: #e6e6e6; } .linha-rank-3 { background: #ffcc99; }
+    .ranking-vazio { padding: 22px; text-align: center; font-size: 22px; font-weight: 900; }
+
+    /* Tela de login (mesma temática) */
+    .login-bg { position: fixed; inset: 0; background: #fff3df; display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 2000; }
+    .login-card { width: 100%; max-width: 380px; background: #fff; border: 4px solid #222; border-radius: 18px; box-shadow: 0 8px 0 #222; overflow: hidden; }
+    .login-card .top { background: linear-gradient(135deg, #ff7a00, #ffb347); border-bottom: 5px solid #222; padding: 20px; text-align: center; }
+    .login-card .top h1 { margin: 0; font-size: 22px; font-weight: 900; }
+    .login-card .top p { margin: 4px 0 0; font-weight: 700; font-size: 13px; }
+    .login-card .body { padding: 20px; }
+    .login-card label { display: block; font-size: 12px; font-weight: 900; margin: 0 0 4px; }
+    .login-card input { width: 100%; padding: 12px; border: 3px solid #222; border-radius: 10px; font-size: 16px; margin-bottom: 12px; }
+    .login-card button { width: 100%; }
+    #loginMsg { margin-top: 12px; }
+
+    @media(max-width: 900px) {
+      .painel { grid-template-columns: 1fr; }
+      .busca { grid-template-columns: 1fr; }
+      button, .busca input { width: 100%; }
+      .modal-header { grid-template-columns: 1fr; gap: 10px; }
+      .modal-header h2 { text-align: center; }
+      .resumo-modal { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); }
+      .resumo-mini { min-width: 0; font-size: 12px; padding: 7px; }
+      .resumo-mini span { font-size: 22px; }
+      .fechar { width: 100%; }
+      .clusters { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+      .ranking-topo { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- ===== AVISO SE FIREBASE NÃO CONFIGURADO ===== -->
+<div id="setupWarn" class="login-bg" style="display:none">
+  <div class="login-card"><div class="top"><h1>Falta configurar o Firebase</h1></div>
+  <div class="body"><p style="font-weight:700">Cole o mesmo <b>firebaseConfig</b> do Check-in no topo do &lt;script&gt;.</p></div></div>
+</div>
+
+<!-- ===== Contêiner reservado para mensagens de acesso ===== -->
+<div id="login" class="login-bg" style="display:none"></div>
+
+<!-- ===== APP ===== -->
+<div id="app" style="display:none">
+  <header>
+    <h1>🖥️ YMS JARDIM ADRIANA</h1>
+  </header>
+
+  <div class="container">
+    <div class="painel">
+      <div class="card">TOTAL<span id="total">0</span></div>
+      <div class="card">FINALIZADAS<span id="finalizados">0</span></div>
+      <div class="card">FALTAM<span id="faltam">0</span></div>
+    </div>
+    <div class="mesas-grid" id="mesasGrid"></div>
+  </div>
+
+  <!-- MODAL DA MESA -->
+  <div class="modal-bg" id="modalBg">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="tituloMesa">Mesa</h2>
+        <button class="btn-ranking-topo" onclick="abrirRanking()" title="Ranking">🏆</button>
+        <div class="resumo-modal">
+          <div class="resumo-mini">TOTAL<span id="totalModal">0</span></div>
+          <div class="resumo-mini">FINALIZADAS<span id="finalizadosModal">0</span></div>
+          <div class="resumo-mini">FALTAM<span id="faltamModal">0</span></div>
+        </div>
+        <button class="fechar" onclick="fecharModal()">FECHAR</button>
+      </div>
+
+      <div class="modal-body">
+        <div id="msg" class="msg"></div>
+        <div id="redirectBox" class="redirect"></div>
+
+        <div class="busca">
+          <input id="idMotorista" placeholder="DIGITE OU BIPE O ID" onkeydown="enterBuscar(event)">
+          <button id="btnBuscar" onclick="buscar()">🔎 PESQUISAR</button>
+          <button id="btnFinalizar" onclick="finalizar()">✅ FINALIZAR ROTA</button>
+        </div>
+
+        <div id="resultado" class="resultado">
+          <div class="titulo">RESULTADO DA PESQUISA</div>
+          <table><tbody>
+            <tr><th>MOTORISTA</th><td id="resNome"></td></tr>
+            <tr><th>ROTA</th><td id="resRota"></td></tr>
+            <tr><th>VEÍCULO</th><td id="resVeiculo"></td></tr>
+            <tr><th>STATUS</th><td id="resStatus"></td></tr>
+          </tbody></table>
+        </div>
+
+        <div id="motoBox" class="moto-box">
+          <div class="titulo">🏍️ PACOTES DA MOTO PARA PASSAR</div>
+          <div id="totalMotoBar" class="total-moto-bar">TOTAL: 0 PACOTES</div>
+          <div id="clustersMoto" class="clusters"></div>
+        </div>
+
+        <div id="mesmaRotaBox" class="resultado">
+          <div class="titulo">⚠️ MOTORISTAS DA MESMA ROTA ⚠️</div>
+          <table>
+            <thead><tr><th>ID</th><th>NOME</th><th>ROTA</th><th>VEÍCULO</th><th>STATUS</th></tr></thead>
+            <tbody id="tbodyMesmaRota"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL RANKING -->
+  <div class="modal-bg" id="rankingBg">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>🏆 Ranking de Produtividade</h2>
+        <div class="resumo-modal">
+          <div class="resumo-mini">LÍDER<span id="liderRanking">-</span></div>
+          <div class="resumo-mini">ROTAS<span id="rotasLider">0</span></div>
+          <div class="resumo-mini">MESAS<span id="totalMesasRanking">0</span></div>
+        </div>
+        <button class="fechar" onclick="fecharRanking()">FECHAR</button>
+      </div>
+      <div class="modal-body">
+        <div id="rankingTop3" class="ranking-topo"></div>
+        <div class="resultado" style="display:block;">
+          <div class="titulo">ROTAS FINALIZADAS POR MESA</div>
+          <table>
+            <thead><tr><th>POSIÇÃO</th><th>MESA</th><th>ROTAS FEITAS</th></tr></thead>
+            <tbody id="tbodyRanking"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==================================================================
+   CONFIGURAÇÃO DO FIREBASE — use o MESMO do Check-in
+   ================================================================== */
+const firebaseConfig = {
+  apiKey:            "AIzaSyBtq7JwlkxLKKAhs5TUmKHa_78db6tTaUM",
+  authDomain:        "yms--static-rounting.firebaseapp.com",
+  projectId:         "yms--static-rounting",
+  storageBucket:     "yms--static-rounting.firebasestorage.app",
+  messagingSenderId: "119446994843",
+  appId:             "1:119446994843:web:39d5182ce05ab20d2aeb3e"
+};
+/* ================================================================== */
+
+const QTD_MESAS = 30;   // altere aqui se precisar de mais/menos mesas
+const C_USERS='usuarios', C_OP='operacao', C_ROTAS='rotas';
+
+const NAO_CONFIG = firebaseConfig.apiKey === "COLE_AQUI";
+let auth=null, db=null, FV=null;
+if(NAO_CONFIG){ document.getElementById('setupWarn').style.display='flex'; }
+else{
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth(); db = firebase.firestore(); FV = firebase.firestore.FieldValue;
+}
+
+const $ = id => document.getElementById(id);
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function san(v){ return String(v==null?'':v).trim().replace(/[\/\\.#$\[\]\s]+/g,'_') || '_'; }
+function limpaRota(r){ return String(r||'').replace(/\s+/g,'').toUpperCase(); }
+
+// estado
+let appIniciado=false, mesaAtual='', idAtual='', ehRedirect=false;
+let opCache={}, rotasCache={};
+let unsubOp=null, unsubRotas=null;
+
+/* ============ ACESSO SEM SENHA (login anônimo) ============ */
+if(!NAO_CONFIG){
+  auth.onAuthStateChanged(user=>{ if(user) iniciarApp(); });
+  auth.signInAnonymously().catch(e=>{
+    $('login').style.display='flex';
+    $('login').innerHTML = '<div class="login-card"><div class="top"><h1>Não foi possível acessar</h1></div>'+
+      '<div class="body"><p style="font-weight:700">Ative o acesso <b>Anônimo</b> no Firebase:<br>'+
+      'Authentication → Sign-in method → Anônimo → Ativar.</p>'+
+      '<p style="font-size:12px;color:#a00">'+esc(e.message)+'</p></div></div>';
+  });
+}
+function mostrarTela(id){ ['setupWarn','login','app'].forEach(t=>{ const el=$(t); if(el) el.style.display='none'; });
+  $(id).style.display = id==='app' ? 'block' : 'flex'; }
+
+/* ================= APP ================= */
+function iniciarApp(){
+  if(appIniciado) return;
+  appIniciado = true;
+  mostrarTela('app');
+  montarMesas();
+  ouvirDados();
+}
+function listarMesas(){ const a=[]; for(let i=1;i<=QTD_MESAS;i++) a.push('Mesa '+i); return a; }
+
+function montarMesas(){
+  const grid=$('mesasGrid'); grid.innerHTML='';
+  listarMesas().forEach(mesa=>{
+    const div=document.createElement('div');
+    div.className='mesa-card'; div.dataset.mesa=mesa;
+    div.innerHTML = `${mesa}<span class="dono-tag"></span>`;
+    div.onclick=()=>abrirModal(mesa);
+    grid.appendChild(div);
+  });
+  pintarDonos();
+}
+function pintarDonos(){
+  // mostra em cada mesa quantas rotas ela está tocando
+  const cont={};
+  Object.values(rotasCache).forEach(r=>{ cont[r.mesa]=(cont[r.mesa]||0)+1; });
+  document.querySelectorAll('.mesa-card').forEach(c=>{
+    const n=cont[c.dataset.mesa]||0;
+    c.classList.toggle('ocupada', n>0);
+    c.querySelector('.dono-tag').innerText = n>0 ? `${n} rota(s) aberta(s)` : '';
+  });
+}
+
+/* ---- tempo real ---- */
+let avisouErro=false;
+function avisoLeitura(qual, err){
+  console.error('Erro ao ler '+qual, err);
+  if(!avisouErro){
+    avisouErro=true;
+    alert('Não consegui ler os dados ('+qual+').\n\nVerifique se as regras do Firestore foram publicadas (leitura de operacao/rotas com "signed()") e recarregue a página.');
+  }
+}
+function ouvirDados(){
+  unsubOp = db.collection(C_OP).onSnapshot(s=>{
+    opCache={}; s.forEach(d=> opCache[d.id]={docId:d.id, ...d.data()});
+    carregarResumo();
+    if($('modalBg').style.display==='block' && idAtual) rebuscarLocal();
+    if($('rankingBg').style.display==='block') montarRanking(calcularRanking());
+  }, err=> avisoLeitura('operação', err));
+  unsubRotas = db.collection(C_ROTAS).onSnapshot(s=>{
+    rotasCache={}; s.forEach(d=> rotasCache[d.id]={docId:d.id, ...d.data()});
+    pintarDonos();
+    if($('modalBg').style.display==='block' && idAtual) rebuscarLocal();
+  }, err=> avisoLeitura('rotas', err));
+}
+
+/* ---- modal ---- */
+function abrirModal(mesa){
+  mesaAtual=mesa; idAtual=''; ehRedirect=false;
+  $('tituloMesa').innerText='📌 '+mesa;
+  $('modalBg').style.display='block';
+  document.body.style.overflow='hidden';
+  $('idMotorista').value='';
+  limparResultado();
+  carregarResumo();
+  setTimeout(()=>$('idMotorista').focus(),150);
+}
+function fecharModal(){ $('modalBg').style.display='none'; document.body.style.overflow='auto'; idAtual=''; }
+function enterBuscar(e){ if(e.key==='Enter') buscar(); }
+function mostrarMsg(t,tipo){ const m=$('msg'); m.innerText=t; m.className='msg '+tipo; m.style.display='block'; setTimeout(()=>m.style.display='none',4000); }
+
+function achaMotorista(id){
+  const s=san(id);
+  if(opCache[s]) return opCache[s];
+  return Object.values(opCache).find(x=>String(x.id)===String(id).trim()) || null;
+}
+function statusLabel(d){
+  if(d.ymsStatus==='finalizado') return 'FINALIZADO';
+  return (d.checkin==='no_hub') ? 'NO HUB' : 'PENDENTE';
+}
+function pacotesCarro(cluster){ const m=String(cluster||'').match(/\/\s*(\d+)/); return m?Number(m[1]):0; }
+function clustersMoto(cluster){
+  return String(cluster||'').split('+').map(p=>{
+    const m=p.trim().match(/^([A-Z]-?\d+)\((\d+)\)$/i);
+    if(m) return {cluster:m[1].toUpperCase(), pacotes:Number(m[2])};
+    return {cluster:p.trim(), pacotes:0};
+  }).filter(x=>x.cluster);
+}
+
+/* ---- BUSCA com lógica de DONO DA ROTA ---- */
+async function buscar(){
+  const id=$('idMotorista').value.trim();
+  if(!mesaAtual) return mostrarMsg('Selecione uma mesa primeiro.','erro');
+  if(!id) return mostrarMsg('Digite o ID do motorista.','erro');
+
+  const d = achaMotorista(id);
+  if(!d){ idAtual=''; limparResultado(); mostrarMsg('Motorista não encontrado na operação de hoje.','erro'); return; }
+
+  idAtual = id;
+  const rota = limpaRota(d.cluster);
+  const rotaId = san(rota);
+
+  // Descobre/define o DONO da rota via transação (a 1ª mesa que pesquisar fica dona)
+  $('btnBuscar').disabled=true;
+  let dono = mesaAtual, novo=false;
+  try{
+    const ref = db.collection(C_ROTAS).doc(rotaId);
+    const r = await db.runTransaction(async tx=>{
+      const snap = await tx.get(ref);
+      if(!snap.exists){
+        tx.set(ref, {rota, mesa:mesaAtual, motoristaId:d.id, nome:d.nome, em:FV.serverTimestamp()});
+        return {mesa:mesaAtual, novo:true};
+      }
+      return {mesa:snap.data().mesa, novo:false};
+    });
+    dono = r.mesa; novo = r.novo;
+  }catch(e){ /* se falhar a transação, segue sem travar */ }
+  $('btnBuscar').disabled=false;
+
+  ehRedirect = (dono !== mesaAtual);
+
+  // Se esta mesa é a dona (ou acabou de abrir), marca o motorista nesta mesa
+  if(!ehRedirect){
+    try{ await db.collection(C_OP).doc(d.docId).update({mesa:mesaAtual, mesaEm:FV.serverTimestamp()}); }catch(e){}
+  }
+
+  renderizar(d, ehRedirect ? dono : null);
+}
+
+// re-render local a partir do cache (usado pelo tempo real, sem reescrever dono)
+function rebuscarLocal(){
+  const d = achaMotorista(idAtual);
+  if(!d){ limparResultado(); return; }
+  const rota = limpaRota(d.cluster);
+  const dono = (rotasCache[san(rota)]||{}).mesa;
+  const redir = (dono && dono!==mesaAtual) ? dono : null;
+  ehRedirect = !!redir;
+  renderizar(d, redir);
+}
+
+function limparResultado(){
+  $('resultado').style.display='none';
+  $('motoBox').style.display='none';
+  $('mesmaRotaBox').style.display='none';
+  $('redirectBox').style.display='none';
+  $('btnFinalizar').disabled=false;
+}
+
+function renderizar(d, redirecionarPara){
+  // Banner de redirecionamento
+  const rb=$('redirectBox');
+  if(redirecionarPara){
+    rb.style.display='block';
+    rb.innerHTML = `🔀 ESSA ROTA JÁ FOI ABERTA EM OUTRA MESA<br>
+      Direcione o motorista <b>${esc(d.nome||'')}</b> para:
+      <span class="mesa-destino">${esc(redirecionarPara)}</span><br>
+      <span style="font-size:14px;font-weight:700">A finalização deve ser feita lá.</span>`;
+    $('btnFinalizar').disabled=true;
+  }else{
+    rb.style.display='none';
+    $('btnFinalizar').disabled=false;
+  }
+
+  // Resultado
+  $('resultado').style.display='block';
+  $('mesmaRotaBox').style.display='block';
+  $('resNome').innerText = d.nome||'';
+  $('resVeiculo').innerText = d.veiculo||'';
+
+  const fim = d.ymsStatus==='finalizado';
+  const st = statusLabel(d);
+  const stCell=$('resStatus'); stCell.innerText=st;
+  stCell.className = fim ? 'status-finalizado' : 'status-falta';
+
+  const ehMoto = String(d.veiculo||'').toUpperCase().includes('MOTO');
+  const pac = pacotesCarro(d.cluster);
+  if(!ehMoto && pac>0){
+    $('resRota').innerHTML = `${esc(d.cluster)}<br><span class="pacotes-destaque">PASSAR ${pac} PACOTES</span>`;
+  }else{
+    $('resRota').innerText = d.cluster||'';
+  }
+
+  montarMesmaRota(d);
+  montarMoto(d, ehMoto);
+}
+
+function montarMesmaRota(d){
+  const tbody=$('tbodyMesmaRota'); tbody.innerHTML='';
+  const rota=limpaRota(d.cluster);
+  const lista=Object.values(opCache).filter(x=>x.docId!==d.docId && limpaRota(x.cluster)===rota);
+  if(!lista.length){ tbody.innerHTML='<tr><td colspan="5">NENHUM OUTRO MOTORISTA NESSA MESMA ROTA</td></tr>'; return; }
+  lista.forEach(m=>{
+    const fim = m.ymsStatus==='finalizado';
+    const veic=String(m.veiculo||'').toUpperCase();
+    const pac=pacotesCarro(m.cluster);
+    let rotaHtml=esc(m.cluster||'');
+    if(!veic.includes('MOTO') && pac>0) rotaHtml=`${esc(m.cluster)}<br><span class="pacotes-destaque">PASSAR ${pac} PACOTES</span>`;
+    const tr=document.createElement('tr');
+    tr.className = fim ? 'linha-finalizado' : 'linha-pendente';
+    tr.innerHTML = `<td>${esc(m.id)}</td><td>${esc(m.nome)}</td><td>${rotaHtml}</td>
+      <td>${esc(m.veiculo)}</td><td class="${fim?'status-finalizado':'status-falta'}">${statusLabel(m)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function montarMoto(d, ehMoto){
+  const box=$('motoBox'), div=$('clustersMoto'), bar=$('totalMotoBar');
+  div.innerHTML='';
+  const lista = ehMoto ? clustersMoto(d.cluster) : [];
+  if(!ehMoto || !lista.length){ box.style.display='none'; bar.innerText='TOTAL: 0 PACOTES'; return; }
+  box.style.display='block';
+  let total=0;
+  lista.forEach(c=>{
+    const q=Number(String(c.pacotes||'0').replace(/\D/g,''))||0; total+=q;
+    const card=document.createElement('div'); card.className='cluster-card';
+    card.innerHTML=`<h2>${esc(c.cluster)}</h2><p>${q} PACOTES</p>`;
+    div.appendChild(card);
+  });
+  bar.innerText=`TOTAL DA MOTO: ${total} PACOTES`;
+  const tc=document.createElement('div'); tc.className='cluster-card cluster-total';
+  tc.innerHTML=`<h2>TOTAL DA MOTO</h2><p>${total} PACOTES</p>`; div.appendChild(tc);
+}
+
+/* ---- FINALIZAR ---- */
+async function finalizar(){
+  const id=$('idMotorista').value.trim();
+  if(!mesaAtual) return mostrarMsg('Selecione uma mesa primeiro.','erro');
+  if(!id) return mostrarMsg('Digite o ID antes de finalizar.','erro');
+  if(ehRedirect) return mostrarMsg('Essa rota pertence a outra mesa. Direcione o motorista para lá.','erro');
+
+  const d=achaMotorista(id);
+  if(!d) return mostrarMsg('Motorista não encontrado.','erro');
+  if(d.ymsStatus==='finalizado') return mostrarMsg('Esse motorista já foi finalizado.','erro');
+
+  $('btnFinalizar').disabled=true;
+  try{
+    await db.collection(C_OP).doc(d.docId).update({
+      ymsStatus:'finalizado', finalizadoEm:FV.serverTimestamp(), finalizadoPor:mesaAtual
+    });
+    // libera a rota se todos os motoristas dela já estiverem finalizados
+    const rota=limpaRota(d.cluster);
+    const restam=Object.values(opCache).filter(x=>x.docId!==d.docId && limpaRota(x.cluster)===rota && x.ymsStatus!=='finalizado');
+    if(restam.length===0){ try{ await db.collection(C_ROTAS).doc(san(rota)).delete(); }catch(e){} }
+    mostrarMsg('Motorista finalizado com sucesso.','ok');
+  }catch(e){ mostrarMsg('Erro: '+e.message,'erro'); }
+  finally{ $('btnFinalizar').disabled=false; }
+}
+
+/* ---- RESUMO ---- */
+function carregarResumo(){
+  const todos=Object.values(opCache);
+  const total=todos.length;
+  const fim=todos.filter(d=>d.ymsStatus==='finalizado').length;
+  const faltam=total-fim;
+  [['total',total],['finalizados',fim],['faltam',faltam],
+   ['totalModal',total],['finalizadosModal',fim],['faltamModal',faltam]]
+   .forEach(([id,v])=>{ const el=$(id); if(el) el.innerText=v; });
+}
+
+/* ---- RANKING ---- */
+function abrirRanking(){ $('rankingBg').style.display='block'; document.body.style.overflow='hidden'; montarRanking(calcularRanking()); }
+function fecharRanking(){ $('rankingBg').style.display='none'; if($('modalBg').style.display!=='block') document.body.style.overflow='auto'; }
+function calcularRanking(){
+  const cont={}; for(let i=1;i<=QTD_MESAS;i++) cont['Mesa '+i]=0;
+  Object.values(opCache).forEach(d=>{ if(d.ymsStatus==='finalizado' && d.finalizadoPor) cont[d.finalizadoPor]=(cont[d.finalizadoPor]||0)+1; });
+  return Object.keys(cont).map(m=>({mesa:m,total:cont[m]}))
+    .sort((a,b)=> b.total-a.total || a.mesa.localeCompare(b.mesa)).filter(x=>x.total>0);
+}
+function montarRanking(lista){
+  const tbody=$('tbodyRanking'), top3=$('rankingTop3');
+  tbody.innerHTML=''; top3.innerHTML='';
+  if(!lista.length){
+    tbody.innerHTML='<tr><td colspan="3" class="ranking-vazio">NENHUMA FINALIZAÇÃO REGISTRADA</td></tr>';
+    $('liderRanking').innerText='-'; $('rotasLider').innerText='0'; $('totalMesasRanking').innerText='0'; return;
+  }
+  $('liderRanking').innerText=lista[0].mesa; $('rotasLider').innerText=lista[0].total; $('totalMesasRanking').innerText=lista.length;
+  lista.slice(0,3).forEach((it,i)=>{
+    const med=i===0?'🥇 1º':i===1?'🥈 2º':'🥉 3º';
+    const c=document.createElement('div'); c.className='ranking-card';
+    c.innerHTML=`<span class="posicao">${med.split(' ')[0]} ${med.split(' ')[1]}</span>
+      <span class="mesa-rank">${esc(it.mesa)}</span><span class="qtd-rank">${it.total} ROTAS</span>`;
+    top3.appendChild(c);
+  });
+  lista.forEach((it,i)=>{
+    let pos=`${i+1}º`, cls='';
+    if(i===0){pos='🥇 1º';cls='linha-rank-1';} else if(i===1){pos='🥈 2º';cls='linha-rank-2';} else if(i===2){pos='🥉 3º';cls='linha-rank-3';}
+    const tr=document.createElement('tr'); tr.className=cls;
+    tr.innerHTML=`<td>${pos}</td><td>${esc(it.mesa)}</td><td>${it.total}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+window.abrirRanking=abrirRanking; window.fecharRanking=fecharRanking;
+window.buscar=buscar; window.finalizar=finalizar; window.fecharModal=fecharModal; window.enterBuscar=enterBuscar;
+
+if(!NAO_CONFIG) mostrarTela('login');
+</script>
+</body>
+</html>
