@@ -86,6 +86,7 @@
 
   /* letras */
   .letras{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .filtro-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:2px 0 6px}
   .letras button{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
     border-radius:8px;padding:8px 12px;font-weight:700;font-size:13px}
   .letras button.active{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -264,6 +265,9 @@
         <h2>Motoristas do dia</h2>
         <p class="hint">Separados pela primeira letra da rota (A-2+A-2 → letra A). Atualiza em tempo real.</p>
         <div class="stats" id="statusStats"></div>
+        <div class="filtro-label">Veículo</div>
+        <div class="letras" id="veiculos"></div>
+        <div class="filtro-label">Letra da rota</div>
         <div class="letras" id="letras"></div>
         <div class="lista" id="listaStatus"></div>
       </div>
@@ -401,6 +405,7 @@ let usuarioAtual = null;      // {uid, nome, email, role, aprovado}
 let ehAdmin = false;
 let opCache = {};             // id -> dados (tempo real)
 let letraSel = 'TODAS';
+let veicSel = 'TODOS';
 let unsubOp = null, unsubUsers = null;
 let codeReader = null, camAtual = null, camList = [], camIdx = 0;
 const ultimoBip = {};        // debounce
@@ -570,6 +575,15 @@ function listaOrdenada(){
 }
 function checkinDe(d){ return d.checkin || 'pendente'; }
 
+// Categoria do veículo (ZOF-*-AR conta igual ao tipo base)
+function tipoVeiculo(v){
+  const n = norm(v);
+  if(n.includes('MOTO')) return 'MOTO';
+  if(n.includes('FIORINO')) return 'FIORINO';
+  if(n.includes('PASSEIO')) return 'PASSEIO';
+  return 'OUTRO';
+}
+
 function renderStatus(){
   const todos = listaOrdenada();
   const noHub = todos.filter(d=>checkinDe(d)==='no_hub').length;
@@ -580,26 +594,43 @@ function renderStatus(){
     <div class="stat ok"><div class="n">${noHub}</div><div class="l">No hub</div></div>
     <div class="stat pend"><div class="n">${pend}</div><div class="l">Pendentes</div></div>`;
 
-  // letras
-  const porLetra = {};
-  todos.forEach(d=>{ const l=d.letra||'?'; (porLetra[l]=porLetra[l]||[]).push(d); });
-  const letras = Object.keys(porLetra).sort();
-  const box = $('letras'); box.innerHTML='';
-  const mkBtn=(l,arr)=>{
+  const contBtn=(sel,key,label,arr,onClick)=>{
     const nh = arr.filter(d=>checkinDe(d)==='no_hub').length;
     const b=document.createElement('button');
-    b.className = (letraSel===l?'active':'');
-    b.innerHTML = `${l==='TODAS'?'Todas':l} <span class="c">${nh}/${arr.length}</span>`;
-    b.onclick=()=>{ letraSel=l; renderStatus(); };
+    b.className = (sel===key?'active':'');
+    b.innerHTML = `${label} <span class="c">${nh}/${arr.length}</span>`;
+    b.onclick = onClick;
     return b;
   };
-  box.appendChild(mkBtn('TODAS', todos));
-  letras.forEach(l=> box.appendChild(mkBtn(l, porLetra[l])));
 
-  const filtrados = letraSel==='TODAS' ? todos : (porLetra[letraSel]||[]);
+  // ----- FILTRO DE VEÍCULO (contagem dentro da letra atual) -----
+  const baseVeic = letraSel==='TODAS' ? todos : todos.filter(d=>(d.letra||'?')===letraSel);
+  const porVeic = {FIORINO:[], MOTO:[], PASSEIO:[], OUTRO:[]};
+  baseVeic.forEach(d=>{ (porVeic[tipoVeiculo(d.veiculo)] ||= []).push(d); });
+  const boxV = $('veiculos'); boxV.innerHTML='';
+  boxV.appendChild(contBtn(veicSel,'TODOS','Todos', baseVeic, ()=>{ veicSel='TODOS'; renderStatus(); }));
+  [['FIORINO','Fiorino'],['MOTO','Moto'],['PASSEIO','Passeio']].forEach(([k,l])=>{
+    boxV.appendChild(contBtn(veicSel,k,l, porVeic[k], ()=>{ veicSel=k; renderStatus(); }));
+  });
+  if(porVeic.OUTRO.length) boxV.appendChild(contBtn(veicSel,'OUTRO','Outro', porVeic.OUTRO, ()=>{ veicSel='OUTRO'; renderStatus(); }));
+
+  // ----- FILTRO DE LETRA (contagem dentro do veículo atual) -----
+  const baseLetra = veicSel==='TODOS' ? todos : todos.filter(d=>tipoVeiculo(d.veiculo)===veicSel);
+  const porLetra = {};
+  baseLetra.forEach(d=>{ const l=d.letra||'?'; (porLetra[l]=porLetra[l]||[]).push(d); });
+  if(letraSel!=='TODAS' && !porLetra[letraSel]) letraSel='TODAS'; // reseta se a letra sumiu no filtro
+  const letras = Object.keys(porLetra).sort();
+  const box = $('letras'); box.innerHTML='';
+  box.appendChild(contBtn(letraSel,'TODAS','Todas', baseLetra, ()=>{ letraSel='TODAS'; renderStatus(); }));
+  letras.forEach(l=> box.appendChild(contBtn(letraSel,l,l, porLetra[l], ()=>{ letraSel=l; renderStatus(); })));
+
+  // ----- LISTA FINAL (aplica os dois filtros) -----
+  let filtrados = todos;
+  if(veicSel!=='TODOS') filtrados = filtrados.filter(d=>tipoVeiculo(d.veiculo)===veicSel);
+  if(letraSel!=='TODAS') filtrados = filtrados.filter(d=>(d.letra||'?')===letraSel);
   $('listaStatus').innerHTML = filtrados.length
     ? filtrados.map(linhaMotorista).join('')
-    : '<div class="empty">Nenhum motorista importado ainda.</div>';
+    : '<div class="empty">Nenhum motorista com esse filtro.</div>';
 }
 
 function linhaMotorista(d){
