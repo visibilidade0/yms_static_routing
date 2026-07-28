@@ -100,6 +100,7 @@
   .mot .info .nome{font-weight:600;font-size:14px}
   .mot .info .id{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
   .mot .info .sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .mot-acoes{display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0}
   .badge{font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap}
   .b-ok{background:var(--ok-bg);color:var(--ok)}
   .b-pend{background:var(--pend-bg);color:var(--pend)}
@@ -143,6 +144,8 @@
   .modal-cad{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;max-width:440px;width:100%;
     max-height:88dvh;overflow:auto}
   .modal-cad h3{margin:0 0 6px;font-size:17px}
+  .sub-box{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:13px;line-height:1.6}
+  .sub-box .id{color:var(--muted)}
   .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;max-width:420px;width:100%;
     max-height:80dvh;overflow:auto}
   .modal h3{margin:0 0 12px;font-size:16px}
@@ -306,21 +309,6 @@
       </div>
     </section>
 
-    <!-- SUBSTITUIR (admin) -->
-    <section id="secTroca" class="tabpage hidden">
-      <div class="panel">
-        <h2>Substituir motorista</h2>
-        <p class="hint">Quando alguém não comparece: informe o ID de quem sai e o ID de quem entra.
-          O novo é puxado da base — se ele ainda não estiver cadastrado, abre um cadastro rápido.</p>
-        <div class="row">
-          <div class="field"><label>ID que sai (remover do dia)</label><input id="inSai" type="text" inputmode="numeric" placeholder="ID atual" /></div>
-          <div class="field"><label>ID que entra</label><input id="inEntra" type="text" inputmode="numeric" placeholder="Novo ID" /></div>
-        </div>
-        <button id="btnTrocar" class="btn">Substituir</button>
-        <div id="trocaMsg"></div>
-      </div>
-    </section>
-
     <!-- YMS -->
     <section id="secYms" class="tabpage hidden">
       <div class="panel">
@@ -348,21 +336,30 @@
     </section>
   </main>
 
-  <!-- MODAL: cadastrar motorista (usado na substituição quando não está na base) -->
-  <div id="modalCad" class="modal-bg hidden">
+  <!-- MODAL: substituir motorista (a partir da lista de Status) -->
+  <div id="modalSub" class="modal-bg hidden">
     <div class="modal-cad">
-      <h3 id="modalCadTitulo">Cadastrar motorista</h3>
-      <p class="hint" style="margin-top:0">Este ID não está na base. Preencha para cadastrar e concluir a substituição.</p>
-      <div class="field"><label>ID</label><input id="cadId" type="text" readonly /></div>
-      <div class="field"><label>Nome</label><input id="cadNome" type="text" placeholder="Nome do motorista" /></div>
-      <div class="field"><label>Cluster / Rota</label><input id="cadCluster" type="text" placeholder="Ex.: A-2+A-2 ou C-15 (43) C-16 (27)" /></div>
-      <div class="field"><label>Veículo</label><input id="cadVeiculo" type="text" placeholder="Moto, Fiorino, Passeio..." /></div>
-      <div class="field"><label>Telefone</label><input id="cadTelefone" type="text" inputmode="numeric" placeholder="Telefone" /></div>
-      <div class="row" style="margin-top:6px">
-        <button id="cadSalvar" class="btn" style="flex:1">Cadastrar e substituir</button>
-        <button id="cadCancelar" class="btn sec" style="flex:1">Cancelar</button>
+      <h3>Substituir motorista</h3>
+      <p class="hint" style="margin-top:0">Só o motorista muda — a <b>rota continua a mesma</b>.</p>
+      <div class="sub-box">
+        <div>Sai: <b id="subSaiNome">—</b> <span class="id" id="subSaiId"></span></div>
+        <div>Rota mantida: <b id="subRota">—</b></div>
       </div>
-      <div id="cadMsg"></div>
+      <div class="field"><label>ID do novo motorista</label>
+        <div class="row" style="gap:8px">
+          <input id="subNovoId" type="text" inputmode="numeric" placeholder="ID de quem entra" style="flex:1" />
+          <button id="subBuscar" class="btn small" style="height:44px">Buscar</button>
+        </div>
+      </div>
+      <div id="subDados" class="hidden">
+        <div id="subOrigem"></div>
+        <div class="field"><label>Nome</label><input id="subNome" type="text" placeholder="Nome do motorista" /></div>
+        <div class="field"><label>Veículo</label><input id="subVeiculo" type="text" placeholder="Moto, Fiorino, Passeio..." /></div>
+        <div class="field"><label>Telefone</label><input id="subTelefone" type="text" inputmode="numeric" placeholder="Telefone" /></div>
+        <button id="subConfirmar" class="btn" style="width:100%">Confirmar substituição</button>
+      </div>
+      <button id="subCancelar" class="btn sec" style="width:100%;margin-top:8px">Cancelar</button>
+      <div id="subMsg"></div>
     </div>
   </div>
 </div>
@@ -401,6 +398,7 @@ const C_OP    = 'operacao';     // dia atual (com status)
 
 // Estado
 let usuarioAtual = null;      // {uid, nome, email, role, aprovado}
+let ehAdmin = false;
 let opCache = {};             // id -> dados (tempo real)
 let letraSel = 'TODAS';
 let unsubOp = null, unsubUsers = null;
@@ -516,13 +514,13 @@ const ABAS = [
   {id:'secCheckin', tab:'Check-in', admin:false},
   {id:'secStatus',  tab:'Status',   admin:false},
   {id:'secImport',  tab:'Importar', admin:true},
-  {id:'secTroca',   tab:'Substituir',admin:true},
   {id:'secUsers',   tab:'Usuários',  admin:true},
 ];
 
 function iniciarApp(){
   mostrarTela('app');
   const isAdmin = usuarioAtual.role === 'admin';
+  ehAdmin = isAdmin;
   $('whoNome').textContent = usuarioAtual.nome || usuarioAtual.email;
   const rt = $('whoRole');
   rt.textContent = isAdmin ? 'Admin' : 'Bipador';
@@ -611,12 +609,14 @@ function linhaMotorista(d){
              : noHub ? `<span class="badge b-ok">No hub</span>`
                      : `<span class="badge b-pend">Pendente</span>`;
   const hora = noHub && d.horaCheckin ? `<div class="hora">Chegou: ${agoraHora(d.horaCheckin)}</div>` : '';
+  const btnSub = ehAdmin ? `<button class="btn small sec" onclick="pedirSubstituir('${esc(d.docId)}')">Substituir</button>` : '';
   return `<div class="mot">
     <div class="info">
       <div class="top"><span class="nome">${esc(d.nome||'—')}</span><span class="id">#${esc(d.id||d.docId)}</span></div>
       <div class="sub">${esc(d.cluster||'')} · ${esc(d.veiculo||'')}${d.telefone?' · '+esc(d.telefone):''}</div>
       ${hora}
-    </div>${badge}
+    </div>
+    <div class="mot-acoes">${badge}${btnSub}</div>
   </div>`;
 }
 
@@ -926,93 +926,99 @@ function previewBase(nome){
 function baseMsg(txt,tipo){ $('baseMsg').innerHTML=`<div class="msg ${tipo}">${esc(txt)}</div>`; }
 
 /* ==================================================================
-   SUBSTITUIR (admin) — com cadastro rápido quando não está na base
+   SUBSTITUIR (admin) — direto pela lista de Status
+   A rota permanece a mesma; só o motorista muda.
    ================================================================== */
-if(!NAO_CONFIGURADO){
-  $('btnTrocar').onclick = async ()=>{
-    const sai=$('inSai').value.trim(), entra=$('inEntra').value.trim();
-    if(!entra) return trocaMsg('Informe o ID que entra.','err');
-    $('btnTrocar').disabled=true;
-    try{
-      // cluster/rota que o motorista que sai estava fazendo (o que entra assume)
-      let clusterHerdado='';
-      if(sai){
-        const saiDoc = await db.collection(C_OP).doc(san(sai)).get();
-        if(saiDoc.exists) clusterHerdado = saiDoc.data().cluster || '';
-      }
-      const baseDoc = await db.collection(C_BASE).doc(san(entra)).get();
-      if(!baseDoc.exists){
-        // não está na base -> abre modal de cadastro
-        abrirCadastro(entra, sai, clusterHerdado);
-        $('btnTrocar').disabled=false;
-        return;
-      }
+let subCtx = null; // { saiDocId, saiId, saiNome, cluster, veiculo(sai) }
+
+function pedirSubstituir(saiDocId){
+  const d = opCache[saiDocId];
+  if(!d){ return; }
+  subCtx = { saiDocId, saiId: d.id||saiDocId, saiNome: d.nome||'', cluster: d.cluster||'' };
+  $('subSaiNome').textContent = d.nome || '—';
+  $('subSaiId').textContent = '#'+(d.id||saiDocId);
+  $('subRota').textContent = d.cluster || '(sem rota)';
+  $('subNovoId').value = '';
+  $('subNome').value = ''; $('subVeiculo').value = ''; $('subTelefone').value = '';
+  $('subDados').classList.add('hidden');
+  $('subOrigem').innerHTML = '';
+  $('subMsg').innerHTML = '';
+  $('modalSub').classList.remove('hidden');
+  setTimeout(()=>$('subNovoId').focus(), 100);
+}
+function fecharSub(){ $('modalSub').classList.add('hidden'); subCtx=null; }
+window.pedirSubstituir = pedirSubstituir;
+
+// procura o novo ID; se estiver na base, preenche; se não, deixa cadastrar
+async function buscarNovo(){
+  if(!subCtx) return;
+  const novo = $('subNovoId').value.trim();
+  if(!novo) return subMsg('Digite o ID de quem entra.','err');
+  if(san(novo)===san(subCtx.saiId)) return subMsg('O novo ID é o mesmo que está saindo.','err');
+  $('subBuscar').disabled = true;
+  try{
+    const baseDoc = await db.collection(C_BASE).doc(san(novo)).get();
+    if(baseDoc.exists){
       const nb = baseDoc.data();
-      // se o que entra não tem cluster próprio, herda a rota de quem sai
-      const cluster = nb.cluster || clusterHerdado;
-      await efetuarTroca(sai, { id:nb.id||entra, nome:nb.nome, cluster, veiculo:nb.veiculo, telefone:nb.telefone });
-      trocaMsg(`Pronto: ${nb.nome||entra} entrou${sai?` no lugar de #${sai}`:''}.`,'ok');
-      $('inSai').value=''; $('inEntra').value='';
-    }catch(e){ trocaMsg(e.message,'err'); }
-    finally{ $('btnTrocar').disabled=false; }
-  };
+      $('subNome').value = nb.nome || '';
+      $('subVeiculo').value = nb.veiculo || '';
+      $('subTelefone').value = nb.telefone || '';
+      $('subOrigem').innerHTML = '<div class="msg ok" style="margin-top:0">✓ Encontrado na base. Confira e confirme.</div>';
+    }else{
+      $('subNome').value = ''; $('subVeiculo').value = ''; $('subTelefone').value = '';
+      $('subOrigem').innerHTML = '<div class="msg warn" style="margin-top:0">Novo motorista — será cadastrado na base ao confirmar.</div>';
+    }
+    $('subDados').classList.remove('hidden');
+    setTimeout(()=>$('subNome').focus(), 60);
+  }catch(e){ subMsg('Erro: '+e.message,'err'); }
+  finally{ $('subBuscar').disabled=false; }
 }
 
-// coloca o motorista (entra) na operação e remove quem sai
-async function efetuarTroca(sai, dados){
-  const id = san(dados.id);
-  await db.collection(C_OP).doc(id).set({
+async function confirmarSub(){
+  if(!subCtx) return;
+  const novo = $('subNovoId').value.trim();
+  const nome = $('subNome').value.trim();
+  const veiculo = $('subVeiculo').value.trim();
+  const telefone = $('subTelefone').value.trim();
+  if(!novo) return subMsg('Digite o ID de quem entra.','err');
+  if(!nome) return subMsg('Informe o nome.','err');
+  $('subConfirmar').disabled = true;
+  try{
+    // mantém a rota do que está saindo
+    const cluster = subCtx.cluster;
+    // atualiza/cadastra na base permanente (sem cluster do dia)
+    await db.collection(C_BASE).doc(san(novo)).set({
+      id: novo, nome, veiculo, telefone, letra:'', atualizadoEm: FV.serverTimestamp()
+    }, {merge:true});
+    // efetua a troca na operação, mantendo a mesma rota
+    await efetuarTroca(subCtx.saiDocId, { id: novo, nome, cluster, veiculo, telefone });
+    fecharSub();
+    ouvirBaseCount();
+  }catch(e){ subMsg('Erro: '+e.message,'err'); }
+  finally{ $('subConfirmar').disabled=false; }
+}
+
+// coloca o novo na operação (mesma rota) e remove quem sai
+async function efetuarTroca(saiDocId, dados){
+  const idNovo = san(dados.id);
+  await db.collection(C_OP).doc(idNovo).set({
     id: dados.id, nome: dados.nome||'', cluster: dados.cluster||'', veiculo: dados.veiculo||'', telefone: dados.telefone||'',
     letra: primeiraLetra(dados.cluster),
     checkin:'pendente', horaCheckin:null, ymsStatus:'aguardando', mesa:'', finalizadoEm:null
   }, {merge:true});
-  if(sai){ await db.collection(C_OP).doc(san(sai)).delete(); }
+  // remove o que saiu (se não for o mesmo documento)
+  if(saiDocId && san(saiDocId)!==idNovo){ await db.collection(C_OP).doc(saiDocId).delete(); }
 }
 
-/* ---- Modal de cadastro ---- */
-let cadCtx = null; // {sai, entra}
-function abrirCadastro(entra, sai, clusterHerdado){
-  cadCtx = { sai, entra };
-  $('cadId').value = entra;
-  $('cadNome').value = '';
-  $('cadCluster').value = clusterHerdado || '';
-  $('cadVeiculo').value = '';
-  $('cadTelefone').value = '';
-  $('cadMsg').innerHTML = '';
-  $('modalCad').classList.remove('hidden');
-  setTimeout(()=>$('cadNome').focus(), 100);
-}
-function fecharCadastro(){ $('modalCad').classList.add('hidden'); cadCtx=null; }
+function subMsg(txt,tipo){ $('subMsg').innerHTML=`<div class="msg ${tipo}">${esc(txt)}</div>`; }
 
 if(!NAO_CONFIGURADO){
-  $('cadCancelar').onclick = fecharCadastro;
-  $('modalCad').addEventListener('click', e=>{ if(e.target===$('modalCad')) fecharCadastro(); });
-  $('cadSalvar').onclick = async ()=>{
-    if(!cadCtx) return;
-    const id = cadCtx.entra;
-    const nome = $('cadNome').value.trim();
-    const cluster = $('cadCluster').value.trim();
-    const veiculo = $('cadVeiculo').value.trim();
-    const telefone = $('cadTelefone').value.trim();
-    if(!nome) return cadMsg('Informe o nome.','err');
-    $('cadSalvar').disabled=true;
-    try{
-      // grava na base permanente
-      await db.collection(C_BASE).doc(san(id)).set({
-        id, nome, cluster, veiculo, telefone, letra: primeiraLetra(cluster), atualizadoEm:FV.serverTimestamp()
-      }, {merge:true});
-      // efetua a substituição na operação
-      await efetuarTroca(cadCtx.sai, { id, nome, cluster, veiculo, telefone });
-      const sai = cadCtx.sai;
-      fecharCadastro();
-      trocaMsg(`Cadastrado e substituído: ${nome} entrou${sai?` no lugar de #${sai}`:''}.`,'ok');
-      $('inSai').value=''; $('inEntra').value='';
-      ouvirBaseCount();
-    }catch(e){ cadMsg('Erro: '+e.message,'err'); }
-    finally{ $('cadSalvar').disabled=false; }
-  };
+  $('subBuscar').onclick = buscarNovo;
+  $('subNovoId').addEventListener('keydown', e=>{ if(e.key==='Enter') buscarNovo(); });
+  $('subConfirmar').onclick = confirmarSub;
+  $('subCancelar').onclick = fecharSub;
+  $('modalSub').addEventListener('click', e=>{ if(e.target===$('modalSub')) fecharSub(); });
 }
-function cadMsg(txt,tipo){ $('cadMsg').innerHTML=`<div class="msg ${tipo}">${esc(txt)}</div>`; }
 
 /* ==================================================================
    YMS — mesas
