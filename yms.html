@@ -542,19 +542,16 @@ function limparResultado(){
 }
 
 function renderizar(d, redirecionarPara){
-  // Banner de redirecionamento
+  // Banner informativo (não bloqueia mais a finalização)
   const rb=$('redirectBox');
   if(redirecionarPara){
     rb.style.display='block';
-    rb.innerHTML = `🔀 ESSA ROTA JÁ FOI ABERTA EM OUTRA MESA<br>
-      Direcione o motorista <b>${esc(d.nome||'')}</b> para:
-      <span class="mesa-destino">${esc(redirecionarPara)}</span><br>
-      <span style="font-size:14px;font-weight:700">A finalização deve ser feita lá.</span>`;
-    $('btnFinalizar').disabled=true;
+    rb.innerHTML = `📍 ESSA ROTA TAMBÉM ESTÁ ABERTA NA <span class="mesa-destino">${esc(redirecionarPara)}</span><br>
+      <span style="font-size:14px;font-weight:700">É só um aviso — você pode finalizar aqui mesmo se precisar.</span>`;
   }else{
     rb.style.display='none';
-    $('btnFinalizar').disabled=false;
   }
+  $('btnFinalizar').disabled=false;
 
   // Resultado
   $('resultado').style.display='block';
@@ -685,7 +682,6 @@ async function finalizar(){
   const id=$('idMotorista').value.trim();
   if(!mesaAtual) return mostrarMsg('Selecione uma mesa primeiro.','erro');
   if(!id) return mostrarMsg('Digite o ID antes de finalizar.','erro');
-  if(ehRedirect) return mostrarMsg('Essa rota pertence a outra mesa. Direcione o motorista para lá.','erro');
 
   const d=achaMotorista(id);
   if(!d) return mostrarMsg('Motorista não encontrado.','erro');
