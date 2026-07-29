@@ -611,11 +611,15 @@ function renderStatus(){
   const todos = listaOrdenada();
   const noHub = todos.filter(d=>checkinDe(d)==='no_hub').length;
   const pend  = todos.length - noHub;
+  const finalizadas = todos.filter(d=>d.ymsStatus==='finalizado').length;
+  const rotasPend = todos.length - finalizadas;
 
   $('statusStats').innerHTML = `
     <div class="stat"><div class="n">${todos.length}</div><div class="l">Total do dia</div></div>
     <div class="stat ok"><div class="n">${noHub}</div><div class="l">No hub</div></div>
-    <div class="stat pend"><div class="n">${pend}</div><div class="l">Pendentes</div></div>`;
+    <div class="stat pend"><div class="n">${pend}</div><div class="l">Sem check-in</div></div>
+    <div class="stat ok"><div class="n">${finalizadas}</div><div class="l">Rotas finalizadas</div></div>
+    <div class="stat pend"><div class="n">${rotasPend}</div><div class="l">Rotas pendentes</div></div>`;
 
   const passaVeic   = d => veicSel==='TODOS'  || tipoVeiculo(d.veiculo)===veicSel;
   const passaLetra  = d => letraSel==='TODAS' || (d.letra||'?')===letraSel;
