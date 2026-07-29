@@ -47,6 +47,7 @@
     padding:12px;font-size:15px;font-weight:600;margin-top:6px}
   .btn:hover{background:var(--accent2)}
   .btn.sec{background:transparent;border:1px solid var(--line);color:var(--txt)}
+  .btn.ok{background:var(--ok)} .btn.ok:hover{filter:brightness(1.1)}
   .btn.sec:hover{background:var(--panel2)}
   .btn.danger{background:var(--err)} .btn.danger:hover{filter:brightness(1.1)}
   .btn.small{width:auto;padding:7px 12px;font-size:13px;margin:0}
@@ -684,15 +685,42 @@ function linhaMotorista(d){
   const hora = noHub && d.horaCheckin ? `<div class="hora">Chegou: ${agoraHora(d.horaCheckin)}</div>` : '';
   const fimInfo = fim ? `<div class="hora">Finalizado${d.finalizadoPor?' pela '+esc(d.finalizadoPor):''}${d.finalizadoEm?' · '+agoraHora(d.finalizadoEm):''}</div>` : '';
   const btnSub = ehAdmin ? `<button class="btn small sec" onclick="pedirSubstituir('${esc(d.docId)}')">Substituir</button>` : '';
+  const btnFin = ehAdmin ? (fim
+      ? `<button class="btn small sec" onclick="adminReabrir('${esc(d.docId)}')">Reabrir</button>`
+      : `<button class="btn small ok" onclick="adminFinalizar('${esc(d.docId)}')">Finalizar</button>`) : '';
   return `<div class="mot">
     <div class="info">
       <div class="top"><span class="nome">${esc(d.nome||'—')}</span><span class="id">#${esc(d.id||d.docId)}</span></div>
       <div class="sub">${esc(d.cluster||'')} · ${esc(d.veiculo||'')}${d.telefone?' · '+esc(d.telefone):''}</div>
       ${hora}${fimInfo}
     </div>
-    <div class="mot-acoes">${badge}${btnSub}</div>
+    <div class="mot-acoes">${badge}${btnFin}${btnSub}</div>
   </div>`;
 }
+
+async function adminFinalizar(docId){
+  const d = opCache[docId]; if(!d) return;
+  try{
+    await db.collection(C_OP).doc(docId).update({
+      ymsStatus:'finalizado',
+      finalizadoEm: FV.serverTimestamp(),
+      finalizadoPor: 'Admin: '+(usuarioAtual.nome||usuarioAtual.email)
+    });
+    toast('Rota finalizada.');
+  }catch(e){ toast('Erro: '+e.message); }
+}
+async function adminReabrir(docId){
+  const d = opCache[docId]; if(!d) return;
+  if(!confirm('Voltar esta rota para pendente?')) return;
+  try{
+    await db.collection(C_OP).doc(docId).update({
+      ymsStatus:'aguardando', finalizadoEm: null, finalizadoPor: null
+    });
+    toast('Rota voltou para pendente.');
+  }catch(e){ toast('Erro: '+e.message); }
+}
+window.adminFinalizar = adminFinalizar;
+window.adminReabrir = adminReabrir;
 
 function renderStatusMini(){
   const todos = Object.values(opCache);
