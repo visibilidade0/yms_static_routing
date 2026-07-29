@@ -754,8 +754,19 @@ function finalizadosOrdenados(){
 function renderRelatorio(){
   const cont = $('relatorioWrap');
   if(!cont) return;
+  const todos = Object.values(opCache);
   const fin = finalizadosOrdenados();
-  if(!fin.length){ cont.innerHTML='<div class="empty">Nenhuma rota finalizada no YMS ainda.</div>'; return; }
+  const programadas = todos.length;
+  const finalizadas = fin.length;
+  const pendentes = programadas - finalizadas;
+
+  const stats = `<div class="stats" style="margin-bottom:16px">
+    <div class="stat"><div class="n">${programadas}</div><div class="l">Rotas programadas</div></div>
+    <div class="stat ok"><div class="n">${finalizadas}</div><div class="l">Finalizadas</div></div>
+    <div class="stat pend"><div class="n">${pendentes}</div><div class="l">Pendentes</div></div>
+  </div>`;
+
+  if(!fin.length){ cont.innerHTML = stats + '<div class="empty">Nenhuma rota finalizada no YMS ainda.</div>'; return; }
 
   const porMesa = {};
   fin.forEach(d=>{ const m=d.finalizadoPor||'(sem mesa)'; (porMesa[m]=porMesa[m]||[]).push(d); });
@@ -767,11 +778,7 @@ function renderRelatorio(){
       <td>${esc(d.veiculo||'')}</td><td><b>${esc(d.finalizadoPor||'—')}</b></td><td>${esc(agoraHora(d.finalizadoEm))}</td>
     </tr>`).join('');
 
-  cont.innerHTML = `
-    <div class="stats" style="margin-bottom:14px">
-      <div class="stat"><div class="n">${fin.length}</div><div class="l">Rotas finalizadas</div></div>
-      <div class="stat"><div class="n">${mesas.length}</div><div class="l">Mesas ativas</div></div>
-    </div>
+  cont.innerHTML = stats + `
     <h3 style="font-size:14px;margin:0 0 8px">Total por mesa</h3>
     <table class="rel-tbl"><thead><tr><th>#</th><th>Mesa</th><th>Rotas</th></tr></thead><tbody>${ranking}</tbody></table>
     <h3 style="font-size:14px;margin:18px 0 8px">Detalhado</h3>
