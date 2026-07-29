@@ -157,6 +157,11 @@
   .cs-mot{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--surface-2);
     border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-weight:600;font-size:clamp(12px,1.4vw,14px);flex-wrap:wrap;}
   .cs-nome{flex:1;min-width:120px;}
+  .cs-nome2{font-size:clamp(15px,1.9vw,18px);font-weight:800;}
+  .cs-cls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+  .cs-cl{background:var(--accent-soft);color:var(--accent-strong);border:1px solid #f9cbbd;border-radius:999px;
+    padding:5px 12px;font-weight:700;font-size:clamp(13px,1.6vw,16px);}
+  .cs-cl b{color:var(--text);}
   .cs-pct{background:var(--accent);color:#fff;border-radius:999px;padding:4px 12px;font-weight:800;
     font-size:clamp(13px,1.6vw,16px);white-space:nowrap;}
   .cs-mot .status-finalizado,.cs-mot .status-falta{padding:2px 10px;border-radius:999px;font-size:12px;}
@@ -582,58 +587,56 @@ function pacotesDoCluster(clusterStr, cod){
   return it && it.pacotes ? it.pacotes : null;
 }
 
-// Situação de cada cluster do motorista: quantos dividem, quantos faltam, se é o último
+// Situação: agrupa por MOTORISTA (cada pessoa aparece uma vez), listando
+// as clusters que ela divide com o motorista pesquisado e quanto leva de cada.
 function montarSituacaoClusters(d){
   const box = $('mesmaRotaBox');
   const cods = codigosCluster(d.cluster);
   if(!cods.length){ box.style.display='none'; return; }
   box.style.display='block';
 
-  const todosOutrosFechados = cods.every(cod=>{
-    const outros = Object.values(opCache).filter(x=>x.docId!==d.docId && codigosCluster(x.cluster).includes(cod));
-    return outros.length===0 || outros.every(x=>x.ymsStatus==='finalizado');
+  // monta um mapa: cada OUTRO motorista -> quais clusters divide (com quantidade)
+  const mapa = {};
+  cods.forEach(cod=>{
+    Object.values(opCache).forEach(x=>{
+      if(x.docId===d.docId) return;
+      if(!codigosCluster(x.cluster).includes(cod)) return;
+      if(!mapa[x.docId]) mapa[x.docId] = { mot:x, clusters:[] };
+      mapa[x.docId].clusters.push({ cod, pac: pacotesDoCluster(x.cluster, cod) });
+    });
   });
 
-  let cards='';
-  cods.forEach(cod=>{
-    const comCod = Object.values(opCache).filter(x=>codigosCluster(x.cluster).includes(cod));
-    const outros = comCod.filter(x=>x.docId!==d.docId);
-    const outrosPend = outros.filter(x=>x.ymsStatus!=='finalizado');
-    const finalizados = comCod.filter(x=>x.ymsStatus==='finalizado').length;
-    const aCarregar = comCod.filter(x=>x.ymsStatus!=='finalizado').length;
-    const totalCluster = comCod.reduce((s,x)=> s + (pacotesDoCluster(x.cluster,cod)||0), 0);
+  const outros = Object.values(mapa)
+    .sort((a,b)=> (a.mot.ymsStatus==='finalizado'?1:0)-(b.mot.ymsStatus==='finalizado'?1:0));
+  const algumPendente = outros.some(o=> o.mot.ymsStatus!=='finalizado');
 
-    let tag, cls;
-    if(outros.length===0){ tag='ÚNICO MOTORISTA'; cls='cs-unico'; }
-    else if(outrosPend.length===0){ tag='✅ ÚLTIMO — PODE FECHAR'; cls='cs-ultimo'; }
-    else { tag='⏳ FALTA '+outrosPend.length+' MOTORISTA'+(outrosPend.length>1?'S':''); cls='cs-falta'; }
+  const topo = (!outros.length || !algumPendente)
+    ? `<div class="cs-topo cs-topo-ok">✅ VOCÊ É O ÚLTIMO DESSAS CLUSTERS — PODE FECHAR</div>`
+    : `<div class="cs-topo cs-topo-falta">⏳ AINDA HÁ MOTORISTA(S) PARA CARREGAR DAS MESMAS CLUSTERS</div>`;
 
-    // lista apenas os OUTROS motoristas (que ainda vão levar o restante da cluster)
-    const listaOutros = outros.map(x=>{
-      const fim = x.ymsStatus==='finalizado';
-      const p = pacotesDoCluster(x.cluster, cod);
-      const nome = `${esc(x.nome||x.id)}${x.veiculo?' · '+esc(x.veiculo):''}`;
-      const pctBadge = p ? `<span class="cs-pct">leva ${p} pacotes</span>` : '';
-      return `<div class="cs-mot">
-        <span class="cs-nome">${nome}</span>
-        ${pctBadge}
-        <span class="${fim?'status-finalizado':'status-falta'}" style="padding:2px 8px;border-radius:8px">${fim?'FINALIZADO':statusLabel(x)}</span>
+  let cards;
+  if(!outros.length){
+    cards = `<div class="cs-card cs-unico">
+      <div class="cs-head"><span class="cs-code">${esc(cods.join(', '))}</span><span class="cs-tag">ÚNICO MOTORISTA</span></div>
+      <div class="cs-sub">Nenhum outro motorista divide essas clusters.</div></div>`;
+  } else {
+    cards = outros.map(o=>{
+      const fim = o.mot.ymsStatus==='finalizado';
+      const cls = fim ? 'cs-ultimo' : 'cs-falta';
+      const tag = fim ? '✅ JÁ FINALIZOU' : '⏳ AINDA VAI CARREGAR';
+      const veic = o.mot.veiculo ? ' · '+esc(o.mot.veiculo) : '';
+      const clsBadges = o.clusters.map(c=>
+        `<span class="cs-cl"><b>${esc(c.cod)}</b>${c.pac?' · '+c.pac+' pct':''}</span>`
+      ).join('');
+      return `<div class="cs-card ${cls}">
+        <div class="cs-head">
+          <span class="cs-nome2">${esc(o.mot.nome||o.mot.id)}${veic}</span>
+          <span class="cs-tag">${tag}</span>
+        </div>
+        <div class="cs-cls">${clsBadges}</div>
       </div>`;
     }).join('');
-
-    cards += `<div class="cs-card ${cls}">
-      <div class="cs-head">
-        <span class="cs-code">${esc(cod)}</span>
-        <span class="cs-tag">${tag}</span>
-      </div>
-      <div class="cs-sub">${comCod.length} motorista(s) nessa cluster · ${finalizados} finalizado(s) · ${aCarregar} a carregar${totalCluster>0?` · <b>${totalCluster} pacotes no total da cluster</b>`:''}</div>
-      ${listaOutros?`<div class="cs-lista">${listaOutros}</div>`:''}
-    </div>`;
-  });
-
-  const topo = todosOutrosFechados
-    ? `<div class="cs-topo cs-topo-ok">✅ ÚLTIMO MOTORISTA DE TODAS AS SUAS CLUSTERS — PODE FECHAR</div>`
-    : `<div class="cs-topo cs-topo-falta">⏳ AINDA HÁ MOTORISTAS DA(S) MESMA(S) CLUSTER(S) PARA CARREGAR</div>`;
+  }
 
   box.innerHTML = `<div class="titulo">📦 SITUAÇÃO DAS CLUSTERS DESTE MOTORISTA</div>
     <div class="cs-wrap">${topo}${cards}</div>`;
