@@ -367,11 +367,16 @@ function montarMesas(){
   pintarDonos();
 }
 function pintarDonos(){
-  // mostra em cada mesa quantas rotas ela está tocando
+  // conta as rotas ATIVAS (não finalizadas) que cada mesa está tocando
   const cont={};
-  Object.values(rotasCache).forEach(r=>{ cont[r.mesa]=(cont[r.mesa]||0)+1; });
+  Object.values(opCache).forEach(x=>{
+    if(x.mesa && x.ymsStatus!=='finalizado'){
+      (cont[x.mesa] = cont[x.mesa] || new Set()).add(limpaRota(x.cluster));
+    }
+  });
   document.querySelectorAll('.mesa-card').forEach(c=>{
-    const n=cont[c.dataset.mesa]||0;
+    const set = cont[c.dataset.mesa];
+    const n = set ? set.size : 0;
     c.classList.toggle('ocupada', n>0);
     c.querySelector('.dono-tag').innerText = n>0 ? `${n} rota(s) aberta(s)` : '';
   });
@@ -405,14 +410,10 @@ function ouvirDados(){
   unsubOp = escutar(C_OP, s=>{
     opCache={}; s.forEach(d=> opCache[d.id]={docId:d.id, ...d.data()});
     carregarResumo();
+    pintarDonos();
     if($('modalBg').style.display==='block' && idAtual) rebuscarLocal();
     if($('rankingBg').style.display==='block') montarRanking(calcularRanking());
   }, 'operação');
-  unsubRotas = escutar(C_ROTAS, s=>{
-    rotasCache={}; s.forEach(d=> rotasCache[d.id]={docId:d.id, ...d.data()});
-    pintarDonos();
-    if($('modalBg').style.display==='block' && idAtual) rebuscarLocal();
-  }, 'rotas');
 }
 
 // escuta uma coleção; se der erro de permissão (ex.: regra ainda propagando),
@@ -492,45 +493,37 @@ async function buscar(){
   if(!d){ idAtual=''; limparResultado(); mostrarMsg('Motorista não encontrado na operação de hoje.','erro'); return; }
 
   idAtual = id;
-  const rota = limpaRota(d.cluster);
-  const rotaId = san(rota);
+  const donoMesa = donoAtivoDaRota(d);   // outra mesa com motorista ATIVO da mesma rota
+  ehRedirect = !!donoMesa;
 
-  // Descobre/define o DONO da rota via transação (a 1ª mesa que pesquisar fica dona)
-  $('btnBuscar').disabled=true;
-  let dono = mesaAtual, novo=false;
-  try{
-    const ref = db.collection(C_ROTAS).doc(rotaId);
-    const r = await db.runTransaction(async tx=>{
-      const snap = await tx.get(ref);
-      if(!snap.exists){
-        tx.set(ref, {rota, mesa:mesaAtual, motoristaId:d.id, nome:d.nome, em:FV.serverTimestamp()});
-        return {mesa:mesaAtual, novo:true};
-      }
-      return {mesa:snap.data().mesa, novo:false};
-    });
-    dono = r.mesa; novo = r.novo;
-  }catch(e){ /* se falhar a transação, segue sem travar */ }
-  $('btnBuscar').disabled=false;
-
-  ehRedirect = (dono !== mesaAtual);
-
-  // Se esta mesa é a dona (ou acabou de abrir), marca o motorista nesta mesa
+  // se ninguém ativo da rota está em outra mesa, esta mesa assume o motorista
   if(!ehRedirect){
     try{ await db.collection(C_OP).doc(d.docId).update({mesa:mesaAtual, mesaEm:FV.serverTimestamp()}); }catch(e){}
   }
 
-  renderizar(d, ehRedirect ? dono : null);
+  renderizar(d, donoMesa);
 }
 
-// re-render local a partir do cache (usado pelo tempo real, sem reescrever dono)
+// Retorna a mesa (diferente da atual) que tem um motorista NÃO finalizado da mesma rota.
+// Como só considera ativos, ao finalizar o motorista a divergência some sozinha.
+function donoAtivoDaRota(d){
+  const rota = limpaRota(d.cluster);
+  const outro = Object.values(opCache).find(x =>
+    x.docId!==d.docId &&
+    x.ymsStatus!=='finalizado' &&
+    x.mesa && x.mesa!==mesaAtual &&
+    limpaRota(x.cluster)===rota
+  );
+  return outro ? outro.mesa : null;
+}
+
+// re-render local a partir do cache (tempo real)
 function rebuscarLocal(){
   const d = achaMotorista(idAtual);
   if(!d){ limparResultado(); return; }
-  const rota = limpaRota(d.cluster);
-  const dono = (rotasCache[san(rota)]||{}).mesa;
-  const redir = (dono && dono!==mesaAtual) ? dono : null;
-  ehRedirect = !!redir;
-  renderizar(d, redir);
+  const donoMesa = donoAtivoDaRota(d);
+  ehRedirect = !!donoMesa;
+  renderizar(d, donoMesa);
 }
 
 function limparResultado(){
@@ -614,7 +607,7 @@ function montarSituacaoClusters(d){
   // motoristas de cluster em comum abertos em OUTRA bancada.
   // Só vale para FIORINO e PASSEIO (incl. ZOF-AR). Motos não sinalizam.
   const ehMoto = v => String(v||'').toUpperCase().includes('MOTO');
-  const emOutraBancada = o => o.mot.mesa && o.mot.mesa!==mesaAtual && !ehMoto(o.mot.veiculo);
+  const emOutraBancada = o => o.mot.ymsStatus!=='finalizado' && o.mot.mesa && o.mot.mesa!==mesaAtual && !ehMoto(o.mot.veiculo);
   const outrasBancadas = [...new Set(outros.filter(emOutraBancada).map(o=> o.mot.mesa))];
 
   const topo = (!outros.length || !algumPendente)
@@ -692,10 +685,7 @@ async function finalizar(){
     await db.collection(C_OP).doc(d.docId).update({
       ymsStatus:'finalizado', finalizadoEm:FV.serverTimestamp(), finalizadoPor:mesaAtual
     });
-    // libera a rota se todos os motoristas dela já estiverem finalizados
-    const rota=limpaRota(d.cluster);
-    const restam=Object.values(opCache).filter(x=>x.docId!==d.docId && limpaRota(x.cluster)===rota && x.ymsStatus!=='finalizado');
-    if(restam.length===0){ try{ await db.collection(C_ROTAS).doc(san(rota)).delete(); }catch(e){} }
+    // ao finalizar, o motorista sai da contagem de "ativos" e a divergência some sozinha
     mostrarMsg('Motorista finalizado com sucesso.','ok');
   }catch(e){ mostrarMsg('Erro: '+e.message,'erro'); }
   finally{ $('btnFinalizar').disabled=false; }
