@@ -300,6 +300,9 @@
           <button id="btnImportar" class="btn" style="flex:1" disabled>Importar</button>
           <button id="btnLimparDia" class="btn danger" style="flex:1">Limpar operação do dia</button>
         </div>
+        <div class="row" style="margin-top:10px">
+          <button id="btnLimparMesas" class="btn sec" style="flex:1">Limpar mesas em aberto</button>
+        </div>
         <div id="importMsg"></div>
       </div>
       <div class="panel">
@@ -418,6 +421,7 @@ const FV   = firebase.firestore ? firebase.firestore.FieldValue : null;
 const C_USERS = 'usuarios';
 const C_BASE  = 'motoristas';   // banco permanente
 const C_OP    = 'operacao';     // dia atual (com status)
+const C_ROTAS = 'rotas';        // donos de rota (mesas abertas)
 
 // Estado
 let usuarioAtual = null;      // {uid, nome, email, role, aprovado}
@@ -1017,6 +1021,31 @@ if(!NAO_CONFIGURADO){
       importMsg('Operação do dia limpa.','ok');
     }catch(e){ importMsg('Erro: '+e.message,'err'); }
     finally{ $('btnLimparDia').disabled=false; }
+  };
+
+  $('btnLimparMesas').onclick = async ()=>{
+    if(!confirm('Liberar todas as mesas em aberto? Isso limpa as rotas abertas no YMS. Não desfaz finalizações.')) return;
+    $('btnLimparMesas').disabled=true;
+    try{
+      // apaga a coleção de donos de rota (o que mostra "X rota(s) aberta(s)")
+      const rSnap = await db.collection(C_ROTAS).get();
+      const rDocs = rSnap.docs;
+      for(let i=0;i<rDocs.length;i+=400){
+        const batch=db.batch();
+        rDocs.slice(i,i+400).forEach(d=>batch.delete(d.ref));
+        await batch.commit();
+      }
+      // zera a mesa de cada motorista da operação
+      const oSnap = await db.collection(C_OP).get();
+      const oDocs = oSnap.docs;
+      for(let i=0;i<oDocs.length;i+=400){
+        const batch=db.batch();
+        oDocs.slice(i,i+400).forEach(d=>batch.update(d.ref,{mesa:'', mesaEm:null}));
+        await batch.commit();
+      }
+      importMsg(`Mesas liberadas (${rDocs.length} rota(s) em aberto limpas).`,'ok');
+    }catch(e){ importMsg('Erro: '+e.message,'err'); }
+    finally{ $('btnLimparMesas').disabled=false; }
   };
 }
 function importMsg(txt,tipo){ $('importMsg').innerHTML=`<div class="msg ${tipo}">${esc(txt)}</div>`; }
