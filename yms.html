@@ -493,6 +493,12 @@ async function buscar(){
   if(!d){ idAtual=''; limparResultado(); mostrarMsg('Motorista não encontrado na operação de hoje.','erro'); return; }
 
   idAtual = id;
+
+  // AUTO CHECK-IN: se o motorista foi pesquisado numa mesa, ele está no hub
+  if(d.checkin !== 'no_hub'){
+    try{ await db.collection(C_OP).doc(d.docId).update({ checkin:'no_hub', horaCheckin:FV.serverTimestamp(), checkinPor:'YMS '+mesaAtual }); }catch(e){}
+  }
+
   const donoMesa = donoAtivoDaRota(d);   // outra mesa com motorista ATIVO da mesma rota
   ehRedirect = !!donoMesa;
 
