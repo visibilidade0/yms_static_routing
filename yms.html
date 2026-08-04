@@ -73,7 +73,7 @@
   .modal{background:radial-gradient(1100px 560px at 18% -5%,rgba(238,77,45,.12),transparent),#0a1120;
     width:100vw;height:100dvh;overflow:hidden;position:relative;display:flex;flex-direction:column;}
   .modal-header{flex:0 0 auto;background:rgba(10,17,32,.6);border-bottom:1px solid var(--glass-brd);backdrop-filter:blur(14px);
-    padding:14px clamp(16px,3vw,24px);display:grid;grid-template-columns:1fr auto auto auto;gap:12px;align-items:center;
+    padding:14px clamp(16px,3vw,24px);display:grid;grid-template-columns:auto 1fr auto auto auto;gap:14px;align-items:center;
     padding-top:calc(14px + env(safe-area-inset-top));}
   .modal-header h2{margin:0;font-size:clamp(18px,2.4vw,24px);font-weight:700;white-space:nowrap;color:#fff;}
   .fechar{background:rgba(255,255,255,.08);color:#fff;border:1px solid var(--glass-brd);border-radius:12px;padding:10px 16px;
@@ -158,6 +158,19 @@
     display:inline-block;padding:6px 12px;font-size:clamp(14px,1.8vw,18px);font-weight:800;}
   .linha-rank-1{background:rgba(242,194,0,.08);} .linha-rank-2{background:rgba(255,255,255,.05);} .linha-rank-3{background:rgba(230,150,90,.08);}
   .ranking-vazio{padding:22px;text-align:center;font-size:16px;font-weight:600;color:var(--muted);}
+
+  /* Corrida das mesas (compacta, no cabeçalho) */
+  .corrida{min-width:120px;}
+  .corrida-vazia{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .race-track{position:relative;height:34px;width:100%;}
+  .race-line{position:absolute;top:50%;left:0;right:26px;height:3px;transform:translateY(-50%);border-radius:3px;
+    background:linear-gradient(90deg,rgba(255,255,255,.1),rgba(255,255,255,.24));}
+  .race-trofeu{position:absolute;right:0;top:50%;transform:translateY(-50%);font-size:18px;filter:drop-shadow(0 0 8px rgba(242,194,0,.55));}
+  .race-dot{position:absolute;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;
+    border:1.5px solid rgba(255,255,255,.25);box-shadow:0 2px 8px rgba(0,0,0,.5);transition:left 1.1s cubic-bezier(.22,.85,.25,1);}
+  .race-dot.race-lider{border-color:rgba(242,194,0,.95);box-shadow:0 0 0 2px rgba(242,194,0,.8),0 0 14px rgba(242,194,0,.6);}
+  .race-dot.race-chegou{animation:pulseMesa 1.4s ease-in-out infinite;}
 
   .cs-wrap{padding:14px;display:flex;flex-direction:column;gap:12px;}
   .cs-topo{text-align:center;font-weight:700;font-size:clamp(14px,1.9vw,18px);padding:12px;border-radius:12px;}
@@ -251,6 +264,7 @@
     <div class="modal">
       <div class="modal-header">
         <h2 id="tituloMesa">Mesa</h2>
+        <div id="corridaMesas" class="corrida"></div>
         <button class="btn-ranking-topo" onclick="abrirRanking()" title="Ranking">🏆</button>
         <div class="resumo-modal">
           <div class="resumo-mini">TOTAL<span id="totalModal">0</span></div>
@@ -432,7 +446,7 @@ function ouvirDados(){
     opCache={}; s.forEach(d=> opCache[d.id]={docId:d.id, ...d.data()});
     carregarResumo();
     pintarDonos();
-    if($('modalBg').style.display==='block' && idAtual) rebuscarLocal();
+    if($('modalBg').style.display==='block'){ montarCorrida(); if(idAtual) rebuscarLocal(); }
     if($('rankingBg').style.display==='block') montarRanking(calcularRanking());
   }, 'operação');
 }
@@ -467,6 +481,8 @@ function abrirModal(mesa){
   $('idMotorista').value='';
   limparResultado();
   carregarResumo();
+  corridaPos={};
+  montarCorrida();
   setTimeout(()=>$('idMotorista').focus(),150);
 }
 function fecharModal(){ $('modalBg').style.display='none'; document.body.style.overflow='auto'; idAtual=''; }
@@ -751,6 +767,42 @@ function calcularRanking(){
   return Object.keys(cont).map(m=>({mesa:m,total:cont[m]}))
     .sort((a,b)=> b.total-a.total || a.mesa.localeCompare(b.mesa)).filter(x=>x.total>0);
 }
+let corridaPos = {};   // memória da posição de cada mesa (movimento suave)
+function montarCorrida(){
+  const box = $('corridaMesas'); if(!box) return;
+  const lista = calcularRanking();
+  const totalProg = Object.values(opCache).length;
+  const totalFim  = Object.values(opCache).filter(d=>d.ymsStatus==='finalizado').length;
+  const overall   = totalProg ? totalFim/totalProg : 0;
+
+  if(!lista.length){
+    box.innerHTML = '<div class="corrida-vazia" style="font-size:18px">🏁</div>';
+    corridaPos = {};
+    return;
+  }
+
+  const liderN = lista[0].total || 1;
+  const cores = ['#ee4d2d','#f2c200','#33d17a','#2d7fee','#b45cff','#ff5a45','#12b5a6','#ff8a3d','#ffd43b','#63e6be'];
+
+  const dots = lista.map((it,i)=>{
+    const rel = it.total / liderN;
+    const alvo = Math.max(0, Math.min(1, rel * overall)) * 88;   // posição-alvo (%)
+    const ini  = (corridaPos[it.mesa] !== undefined) ? corridaPos[it.mesa] : 0;
+    corridaPos[it.mesa] = alvo;
+    const cor = cores[i % cores.length];
+    const chegou = i===0 && overall>=0.999;
+    const num = (String(it.mesa).match(/\d+/)||[it.mesa])[0];    // só o número da mesa
+    return `<div class="race-dot${i===0?' race-lider':''}${chegou?' race-chegou':''}" title="${esc(it.mesa)} · ${it.total} rota(s)"
+      data-alvo="${alvo.toFixed(2)}" style="background:${cor};left:${ini.toFixed(2)}%;z-index:${100-i}">${num}</div>`;
+  }).join('');
+
+  box.innerHTML = `<div class="race-track"><div class="race-line"></div>${dots}<div class="race-trofeu">🏆</div></div>`;
+
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    box.querySelectorAll('.race-dot').forEach(d=>{ d.style.left = d.dataset.alvo+'%'; });
+  }));
+}
+
 function montarRanking(lista){
   const tbody=$('tbodyRanking'), top3=$('rankingTop3');
   tbody.innerHTML=''; top3.innerHTML='';
@@ -759,6 +811,7 @@ function montarRanking(lista){
     $('liderRanking').innerText='-'; $('rotasLider').innerText='0'; $('totalMesasRanking').innerText='0'; return;
   }
   $('liderRanking').innerText=lista[0].mesa; $('rotasLider').innerText=lista[0].total; $('totalMesasRanking').innerText=lista.length;
+
   const trofeus=['trofeu_1_lugar.png','trofeu_2_lugar.png','trofeu_3_lugar.png'];
   lista.slice(0,3).forEach((it,i)=>{
     const c=document.createElement('div'); c.className='ranking-card rank-pos-'+(i+1);
