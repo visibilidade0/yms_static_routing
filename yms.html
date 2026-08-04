@@ -128,6 +128,13 @@
   .ranking-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;text-align:center;
     box-shadow:var(--shadow-sm);font-weight:700;}
   .ranking-card .posicao{font-size:clamp(24px,3.4vw,34px);display:block;margin-bottom:6px;}
+  .ranking-card .rank-trofeu{height:120px;width:auto;max-width:100%;display:block;margin:0 auto 8px;object-fit:contain;
+    filter:drop-shadow(0 6px 10px rgba(15,23,42,.18));}
+  .ranking-card{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;}
+  .ranking-card.rank-pos-1{border-color:#f2c200;background:linear-gradient(180deg,#fffdf3,#ffffff);box-shadow:0 8px 24px rgba(242,194,0,.18);}
+  .ranking-card.rank-pos-1 .rank-trofeu{height:150px;}
+  .ranking-card.rank-pos-2{border-color:#c8ccd2;}
+  .ranking-card.rank-pos-3{border-color:#e6b98f;}
   .ranking-card .mesa-rank{font-size:clamp(16px,2vw,20px);display:block;margin-bottom:8px;color:var(--text);}
   .ranking-card .qtd-rank{background:var(--accent-soft);color:var(--accent-strong);border:1px solid #f9cbbd;border-radius:10px;
     display:inline-block;padding:6px 12px;font-size:clamp(14px,1.8vw,18px);font-weight:800;}
@@ -725,10 +732,10 @@ function montarRanking(lista){
     $('liderRanking').innerText='-'; $('rotasLider').innerText='0'; $('totalMesasRanking').innerText='0'; return;
   }
   $('liderRanking').innerText=lista[0].mesa; $('rotasLider').innerText=lista[0].total; $('totalMesasRanking').innerText=lista.length;
+  const trofeus=['trofeu_1_lugar.png','trofeu_2_lugar.png','trofeu_3_lugar.png'];
   lista.slice(0,3).forEach((it,i)=>{
-    const med=i===0?'🥇 1º':i===1?'🥈 2º':'🥉 3º';
-    const c=document.createElement('div'); c.className='ranking-card';
-    c.innerHTML=`<span class="posicao">${med.split(' ')[0]} ${med.split(' ')[1]}</span>
+    const c=document.createElement('div'); c.className='ranking-card rank-pos-'+(i+1);
+    c.innerHTML=`<img class="rank-trofeu" src="${trofeus[i]}" alt="${i+1}º lugar" onerror="this.style.display='none'">
       <span class="mesa-rank">${esc(it.mesa)}</span><span class="qtd-rank">${it.total} ROTAS</span>`;
     top3.appendChild(c);
   });
