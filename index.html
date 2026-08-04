@@ -627,7 +627,14 @@ function renderStatus(){
 
   const passaVeic   = d => veicSel==='TODOS'  || tipoVeiculo(d.veiculo)===veicSel;
   const passaLetra  = d => letraSel==='TODAS' || (d.letra||'?')===letraSel;
-  const passaStatus = d => statusSel==='TODOS' || (statusSel==='NO_HUB' ? checkinDe(d)==='no_hub' : checkinDe(d)!=='no_hub');
+  const ehFim = d => d.ymsStatus==='finalizado';
+  const passaStatus = d => {
+    if(statusSel==='TODOS') return true;
+    if(statusSel==='FINALIZADO') return ehFim(d);
+    if(statusSel==='NO_HUB')   return !ehFim(d) && checkinDe(d)==='no_hub';
+    if(statusSel==='PENDENTE')  return !ehFim(d) && checkinDe(d)!=='no_hub';
+    return true;
+  };
 
   // reseta a letra se ela sumir dentro do veículo/situação atuais
   {
@@ -668,14 +675,16 @@ function renderStatus(){
   box.appendChild(contBtn(letraSel,'TODAS','Todas', baseLetra, ()=>{ letraSel='TODAS'; renderStatus(); }));
   letras.forEach(l=> box.appendChild(contBtn(letraSel,l,l, porLetra[l], ()=>{ letraSel=l; renderStatus(); })));
 
-  // ----- SITUAÇÃO / check-in (facetado por veículo + letra) -----
+  // ----- SITUAÇÃO (facetado por veículo + letra) -----
   const baseSit = todos.filter(d=>passaVeic(d) && passaLetra(d));
-  const arrNoHub = baseSit.filter(d=>checkinDe(d)==='no_hub');
-  const arrPend  = baseSit.filter(d=>checkinDe(d)!=='no_hub');
+  const arrPend  = baseSit.filter(d=> !ehFim(d) && checkinDe(d)!=='no_hub');
+  const arrNoHub = baseSit.filter(d=> !ehFim(d) && checkinDe(d)==='no_hub');
+  const arrFim   = baseSit.filter(ehFim);
   const boxS = $('situacao'); boxS.innerHTML='';
   boxS.appendChild(contBtn(statusSel,'TODOS','Todos', baseSit, ()=>{ statusSel='TODOS'; renderStatus(); }, true));
-  boxS.appendChild(contBtn(statusSel,'NO_HUB','No hub', arrNoHub, ()=>{ statusSel='NO_HUB'; renderStatus(); }, true));
   boxS.appendChild(contBtn(statusSel,'PENDENTE','Pendente', arrPend, ()=>{ statusSel='PENDENTE'; renderStatus(); }, true));
+  boxS.appendChild(contBtn(statusSel,'NO_HUB','No hub', arrNoHub, ()=>{ statusSel='NO_HUB'; renderStatus(); }, true));
+  boxS.appendChild(contBtn(statusSel,'FINALIZADO','Finalizado', arrFim, ()=>{ statusSel='FINALIZADO'; renderStatus(); }, true));
 
   // ----- LISTA FINAL (aplica os três filtros) -----
   const filtrados = todos.filter(d=>passaVeic(d) && passaLetra(d) && passaStatus(d));
