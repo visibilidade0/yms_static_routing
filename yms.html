@@ -162,7 +162,7 @@
   /* Corrida das mesas (compacta, no cabeçalho) */
   .corrida{min-width:120px;}
   .corrida-vazia{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .race-track{position:relative;height:34px;width:100%;}
+  .race-track{position:relative;height:46px;width:100%;}
   .race-line{position:absolute;top:50%;left:0;right:26px;height:3px;transform:translateY(-50%);border-radius:3px;
     background:linear-gradient(90deg,rgba(255,255,255,.1),rgba(255,255,255,.24));}
   .race-trofeu{position:absolute;right:0;top:50%;transform:translateY(-50%);font-size:18px;filter:drop-shadow(0 0 8px rgba(242,194,0,.55));}
@@ -170,6 +170,8 @@
     display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;
     border:1.5px solid rgba(255,255,255,.25);box-shadow:0 2px 8px rgba(0,0,0,.5);transition:left 1.1s cubic-bezier(.22,.85,.25,1);}
   .race-dot.race-lider{border-color:rgba(242,194,0,.95);box-shadow:0 0 0 2px rgba(242,194,0,.8),0 0 14px rgba(242,194,0,.6);}
+  .race-dot.race-atual{width:28px;height:28px;font-size:12px;border-color:#fff;
+    box-shadow:0 0 0 2px #fff,0 0 16px rgba(255,255,255,.6);}
   .race-dot.race-chegou{animation:pulseMesa 1.4s ease-in-out infinite;}
 
   .cs-wrap{padding:14px;display:flex;flex-direction:column;gap:12px;}
@@ -784,16 +786,24 @@ function montarCorrida(){
   const liderN = lista[0].total || 1;
   const cores = ['#ee4d2d','#f2c200','#33d17a','#2d7fee','#b45cff','#ff5a45','#12b5a6','#ff8a3d','#ffd43b','#63e6be'];
 
-  const dots = lista.map((it,i)=>{
+  // garante que a mesa aberta apareça na corrida, mesmo com 0 (na largada)
+  const listaCorrida = lista.slice();
+  if(mesaAtual && !listaCorrida.some(x=>x.mesa===mesaAtual)) listaCorrida.push({mesa:mesaAtual, total:0});
+
+  const dots = listaCorrida.map((it,i)=>{
     const rel = it.total / liderN;
     const alvo = Math.max(0, Math.min(1, rel * overall)) * 88;   // posição-alvo (%)
     const ini  = (corridaPos[it.mesa] !== undefined) ? corridaPos[it.mesa] : 0;
     corridaPos[it.mesa] = alvo;
     const cor = cores[i % cores.length];
+    const atual = it.mesa === mesaAtual;
     const chegou = i===0 && overall>=0.999;
-    const num = (String(it.mesa).match(/\d+/)||[it.mesa])[0];    // só o número da mesa
-    return `<div class="race-dot${i===0?' race-lider':''}${chegou?' race-chegou':''}" title="${esc(it.mesa)} · ${it.total} rota(s)"
-      data-alvo="${alvo.toFixed(2)}" style="background:${cor};left:${ini.toFixed(2)}%;z-index:${100-i}">${num}</div>`;
+    const num = (String(it.mesa).match(/\d+/)||[it.mesa])[0];
+    const vy = ((i % 3) - 1) * 9;                                // espalha em 3 níveis
+    const z = atual ? 999 : (100 - i);
+    const cls = 'race-dot' + (i===0?' race-lider':'') + (atual?' race-atual':'') + (chegou?' race-chegou':'');
+    return `<div class="${cls}" title="${esc(it.mesa)} · ${it.total} rota(s)"
+      data-alvo="${alvo.toFixed(2)}" style="background:${cor};left:${ini.toFixed(2)}%;top:calc(50% + ${vy}px);z-index:${z}">${num}</div>`;
   }).join('');
 
   box.innerHTML = `<div class="race-track"><div class="race-line"></div>${dots}<div class="race-trofeu">🏆</div></div>`;
