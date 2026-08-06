@@ -73,7 +73,7 @@
   .modal{background:radial-gradient(1100px 560px at 18% -5%,rgba(238,77,45,.12),transparent),#0a1120;
     width:100vw;height:100dvh;overflow:hidden;position:relative;display:flex;flex-direction:column;}
   .modal-header{flex:0 0 auto;background:rgba(10,17,32,.6);border-bottom:1px solid var(--glass-brd);backdrop-filter:blur(14px);
-    padding:14px clamp(16px,3vw,24px);display:grid;grid-template-columns:auto 1fr auto auto auto;gap:14px;align-items:center;
+    padding:14px clamp(16px,3vw,24px);display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;
     padding-top:calc(14px + env(safe-area-inset-top));}
   .modal-header h2{margin:0;font-size:clamp(18px,2.4vw,24px);font-weight:700;white-space:nowrap;color:#fff;}
   .fechar{background:rgba(255,255,255,.08);color:#fff;border:1px solid var(--glass-brd);border-radius:12px;padding:10px 16px;
@@ -98,6 +98,11 @@
     border-radius:12px;background:rgba(255,255,255,.06);color:#fff;}
   .busca input::placeholder{color:var(--muted2)}
   .busca input:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px rgba(238,77,45,.25);}
+  .aviso-fixo{display:flex;align-items:center;gap:10px;background:var(--acc-soft);border:1px solid var(--acc-brd);
+    border-radius:12px;padding:10px 14px;margin-bottom:14px;color:#ffb59e;font-weight:700;font-size:clamp(13px,1.6vw,15px);
+    box-shadow:0 0 20px rgba(238,77,45,.12);}
+  .aviso-fixo .ico{font-size:17px;flex:0 0 auto;}
+  .aviso-fixo b{color:#ffd9cd;}
 
   button{border:none;border-radius:12px;padding:12px 18px;font-size:15px;font-weight:700;cursor:pointer;background:var(--acc);
     color:#fff;box-shadow:0 6px 20px rgba(238,77,45,.35);white-space:nowrap;transition:transform .06s,box-shadow .2s,filter .2s;}
@@ -278,8 +283,6 @@
     <div class="modal">
       <div class="modal-header">
         <h2 id="tituloMesa">Mesa</h2>
-        <div id="corridaMesas" class="corrida"></div>
-        <button class="btn-ranking-topo" onclick="abrirRanking()" title="Ranking">🏆</button>
         <div class="resumo-modal">
           <div class="resumo-mini">TOTAL<span id="totalModal">0</span></div>
           <div class="resumo-mini">FINALIZADAS<span id="finalizadosModal">0</span></div>
@@ -296,6 +299,11 @@
           <input id="idMotorista" placeholder="DIGITE OU BIPE O ID" onkeydown="enterBuscar(event)">
           <button id="btnBuscar" onclick="buscar()">🔎 PESQUISAR</button>
           <button id="btnFinalizar" onclick="finalizar()">✅ FINALIZAR ROTA</button>
+        </div>
+
+        <div class="aviso-fixo">
+          <span class="ico">⚠️</span>
+          <span>Só finalize a rota <b>depois</b> que subir no aplicativo do motorista.</span>
         </div>
 
         <div id="resultado" class="resultado">
@@ -320,29 +328,7 @@
   </div>
 
   <!-- MODAL RANKING -->
-  <div class="modal-bg" id="rankingBg">
-    <div class="modal">
-      <div class="modal-header">
-        <h2>🏆 Ranking de Produtividade</h2>
-        <div class="resumo-modal">
-          <div class="resumo-mini">LÍDER<span id="liderRanking">-</span></div>
-          <div class="resumo-mini">ROTAS<span id="rotasLider">0</span></div>
-          <div class="resumo-mini">MESAS<span id="totalMesasRanking">0</span></div>
-        </div>
-        <button class="fechar" onclick="fecharRanking()">FECHAR</button>
-      </div>
-      <div class="modal-body">
-        <div id="rankingTop3" class="ranking-topo"></div>
-        <div class="resultado" style="display:block;">
-          <div class="titulo">ROTAS FINALIZADAS POR MESA</div>
-          <table>
-            <thead><tr><th>POSIÇÃO</th><th>MESA</th><th>ROTAS FEITAS</th></tr></thead>
-            <tbody id="tbodyRanking"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
+
 </div>
 
 <script>
@@ -460,8 +446,7 @@ function ouvirDados(){
     opCache={}; s.forEach(d=> opCache[d.id]={docId:d.id, ...d.data()});
     carregarResumo();
     pintarDonos();
-    if($('modalBg').style.display==='block'){ montarCorrida(); if(idAtual) rebuscarLocal(); }
-    if($('rankingBg').style.display==='block') montarRanking(calcularRanking());
+    if($('modalBg').style.display==='block' && idAtual) rebuscarLocal();
   }, 'operação');
 }
 
@@ -495,8 +480,6 @@ function abrirModal(mesa){
   $('idMotorista').value='';
   limparResultado();
   carregarResumo();
-  corridaPos={};
-  montarCorrida();
   setTimeout(()=>$('idMotorista').focus(),150);
 }
 function fecharModal(){ $('modalBg').style.display='none'; document.body.style.overflow='auto'; idAtual=''; }
@@ -772,121 +755,7 @@ function carregarResumo(){
    .forEach(([id,v])=>{ const el=$(id); if(el) animarNum(el,v); });
 }
 
-/* ---- RANKING ---- */
-function abrirRanking(){ $('rankingBg').style.display='block'; document.body.style.overflow='hidden'; montarRanking(calcularRanking()); }
-function fecharRanking(){ $('rankingBg').style.display='none'; if($('modalBg').style.display!=='block') document.body.style.overflow='auto'; }
-function calcularRanking(){
-  const cont={}; for(let i=1;i<=QTD_MESAS;i++) cont['Mesa '+i]=0;
-  Object.values(opCache).forEach(d=>{ if(d.ymsStatus==='finalizado' && d.finalizadoPor) cont[d.finalizadoPor]=(cont[d.finalizadoPor]||0)+1; });
-  return Object.keys(cont).map(m=>({mesa:m,total:cont[m]}))
-    .sort((a,b)=> b.total-a.total || a.mesa.localeCompare(b.mesa)).filter(x=>x.total>0);
-}
-let corridaPos = {};   // memória da posição de cada mesa (movimento suave)
-function montarCorrida(){
-  const box = $('corridaMesas'); if(!box) return;
-  const lista = calcularRanking();
-  const totalProg = Object.values(opCache).length;
-  const totalFim  = Object.values(opCache).filter(d=>d.ymsStatus==='finalizado').length;
-  const overall   = totalProg ? totalFim/totalProg : 0;
 
-  if(!lista.length){
-    box.innerHTML = '<div class="corrida-vazia" style="font-size:18px">🏁</div>';
-    corridaPos = {};
-    return;
-  }
-
-  const liderN = lista[0].total || 1;
-  const cores = ['#ee4d2d','#f2c200','#33d17a','#2d7fee','#b45cff','#ff5a45','#12b5a6','#ff8a3d','#ffd43b','#63e6be'];
-
-  // garante que a mesa aberta apareça na corrida, mesmo com 0 (na largada)
-  const listaCorrida = lista.slice();
-  if(mesaAtual && !listaCorrida.some(x=>x.mesa===mesaAtual)) listaCorrida.push({mesa:mesaAtual, total:0});
-
-  const dots = listaCorrida.map((it,i)=>{
-    const rel = it.total / liderN;
-    const alvo = Math.max(0, Math.min(1, rel * overall)) * 88;   // posição-alvo (%)
-    const ini  = (corridaPos[it.mesa] !== undefined) ? corridaPos[it.mesa] : 0;
-    corridaPos[it.mesa] = alvo;
-    const cor = cores[i % cores.length];
-    const atual = it.mesa === mesaAtual;
-    const chegou = i===0 && overall>=0.999;
-    const num = (String(it.mesa).match(/\d+/)||[it.mesa])[0];
-    const z = atual ? 999 : (100 - i);                           // mesa aberta sempre por cima
-    const cls = 'race-dot' + (i===0?' race-lider':'') + (atual?' race-atual':'') + (chegou?' race-chegou':'');
-    // visual de pacote: brilho no topo + fita atravessando + cor da mesa
-    const bg = `linear-gradient(rgba(255,255,255,.22),transparent 52%),`
-      + `linear-gradient(transparent 40%,rgba(0,0,0,.22) 40%,rgba(0,0,0,.22) 60%,transparent 60%),${cor}`;
-    return `<div class="${cls}" title="${esc(it.mesa)} · ${it.total} rota(s)"
-      data-alvo="${alvo.toFixed(2)}" style="background:${bg};left:${ini.toFixed(2)}%;z-index:${z}">${num}</div>`;
-  }).join('');
-
-  box.innerHTML = `<div class="race-track"><div class="race-line"></div>${dots}<div class="race-trofeu">🏆</div></div>`;
-
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{
-    box.querySelectorAll('.race-dot').forEach(d=>{ d.style.left = d.dataset.alvo+'%'; });
-  }));
-
-  // 🎉 tudo finalizado + a mesa aberta é a 1ª colocada -> confetes (uma vez só)
-  const venceu = overall>=0.999 && lista.length && lista[0].mesa===mesaAtual;
-  if(venceu && !confeteFeito){ confeteFeito=true; soltarConfetes(); }
-  if(overall<0.999) confeteFeito=false;
-}
-
-/* ---- Confetes do 1º lugar ---- */
-let confeteFeito=false;
-function soltarConfetes(){
-  const cores=['#ee4d2d','#f2c200','#33d17a','#2d7fee','#b45cff','#ff8a3d','#63e6be','#ffffff'];
-  const camada=document.createElement('div'); camada.className='confete-camada';
-  document.body.appendChild(camada);
-  // faixa de "campeã"
-  const faixa=document.createElement('div'); faixa.className='confete-faixa';
-  faixa.innerHTML=`🏆 MESA CAMPEÃ! 🏆<br><span>Todas as rotas finalizadas</span>`;
-  camada.appendChild(faixa);
-  for(let i=0;i<130;i++){
-    const c=document.createElement('span'); c.className='confete';
-    const cor=cores[i%cores.length];
-    c.style.cssText=`left:${Math.random()*100}%;background:${cor};`
-      +`width:${6+Math.random()*8}px;height:${8+Math.random()*10}px;`
-      +`animation-duration:${2.6+Math.random()*2.4}s;animation-delay:${Math.random()*1.2}s;`
-      +`transform:rotate(${Math.random()*360}deg);border-radius:${Math.random()<.4?'50%':'2px'};`;
-    camada.appendChild(c);
-  }
-  try{
-    const ac=new (window.AudioContext||window.webkitAudioContext)();
-    [880,1180,1560].forEach((f,k)=>{ const o=ac.createOscillator(),g=ac.createGain();
-      o.frequency.value=f;o.connect(g);g.connect(ac.destination);
-      const t0=ac.currentTime+k*0.14;o.start(t0);g.gain.setValueAtTime(.14,t0);
-      g.gain.exponentialRampToValueAtTime(.001,t0+.16);o.stop(t0+.17); });
-  }catch(e){}
-  setTimeout(()=>camada.remove(), 6500);
-}
-
-function montarRanking(lista){
-  const tbody=$('tbodyRanking'), top3=$('rankingTop3');
-  tbody.innerHTML=''; top3.innerHTML='';
-  if(!lista.length){
-    tbody.innerHTML='<tr><td colspan="3" class="ranking-vazio">NENHUMA FINALIZAÇÃO REGISTRADA</td></tr>';
-    $('liderRanking').innerText='-'; $('rotasLider').innerText='0'; $('totalMesasRanking').innerText='0'; return;
-  }
-  $('liderRanking').innerText=lista[0].mesa; $('rotasLider').innerText=lista[0].total; $('totalMesasRanking').innerText=lista.length;
-
-  const trofeus=['trofeu_1_lugar.png','trofeu_2_lugar.png','trofeu_3_lugar.png'];
-  lista.slice(0,3).forEach((it,i)=>{
-    const c=document.createElement('div'); c.className='ranking-card rank-pos-'+(i+1);
-    c.innerHTML=`<img class="rank-trofeu" src="${trofeus[i]}" alt="${i+1}º lugar" onerror="this.style.display='none'">
-      <span class="mesa-rank">${esc(it.mesa)}</span><span class="qtd-rank">${it.total} ROTAS</span>`;
-    top3.appendChild(c);
-  });
-  lista.forEach((it,i)=>{
-    let pos=`${i+1}º`, cls='';
-    if(i===0){pos='🥇 1º';cls='linha-rank-1';} else if(i===1){pos='🥈 2º';cls='linha-rank-2';} else if(i===2){pos='🥉 3º';cls='linha-rank-3';}
-    const tr=document.createElement('tr'); tr.className=cls;
-    tr.innerHTML=`<td>${pos}</td><td>${esc(it.mesa)}</td><td>${it.total}</td>`;
-    tbody.appendChild(tr);
-  });
-}
-
-window.abrirRanking=abrirRanking; window.fecharRanking=fecharRanking;
 window.buscar=buscar; window.finalizar=finalizar; window.fecharModal=fecharModal; window.enterBuscar=enterBuscar;
 
 if(!NAO_CONFIG) mostrarTela('login');
