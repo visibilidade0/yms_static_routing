@@ -416,6 +416,8 @@ if (NAO_CONFIGURADO) {
 const auth = NAO_CONFIGURADO ? null : firebase.auth();
 const db   = NAO_CONFIGURADO ? null : firebase.firestore();
 const FV   = firebase.firestore ? firebase.firestore.FieldValue : null;
+// cache offline: reload/reconexão busca só o que mudou (economiza leituras). Tempo real intacto.
+if(db){ try{ db.enablePersistence({synchronizeTabs:true}).catch(()=>{}); }catch(e){} }
 
 // Coleções
 const C_USERS = 'usuarios';
@@ -887,15 +889,12 @@ async function processarBip(codigo){
   if(bipLock) return; bipLock=true;
   try{
     const idDoc = san(raw);
-    let ref = db.collection(C_OP).doc(idDoc);
-    let doc = await ref.get();
-    if(!doc.exists){
-      // fallback: procura pelo campo id original
-      const q = await db.collection(C_OP).where('id','==',raw).limit(1).get();
-      if(!q.empty){ doc=q.docs[0]; ref=doc.ref; }
-    }
-    if(!doc.exists){ feedbackScan('err', ehAdmin ? `ID ${raw} não está na operação de hoje` : `ID não encontrado`); beep(300); return; }
-    const d = doc.data();
+    // usa o que já está no cache do listener (sem leitura extra no banco por bipada)
+    let cached = opCache[idDoc];
+    if(!cached){ cached = Object.values(opCache).find(x=> String(x.id)===raw); }
+    if(!cached){ feedbackScan('err', ehAdmin ? `ID ${raw} não está na operação de hoje` : `ID não encontrado`); beep(300); return; }
+    const ref = db.collection(C_OP).doc(cached.docId);
+    const d = cached;
     if(checkinDe(d)==='no_hub'){ feedbackScan('dup', ehAdmin ? `${d.nome||raw} já fez check-in (${agoraHora(d.horaCheckin)})` : `Já registrado`); beep(520); return; }
     await ref.update({ checkin:'no_hub', horaCheckin: FV.serverTimestamp(), checkinPor: usuarioAtual.nome||usuarioAtual.email });
     feedbackScan('ok', ehAdmin ? `${d.nome||raw} — no hub ✓` : `✓ Check-in registrado`); beep(880);
