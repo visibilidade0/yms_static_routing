@@ -247,31 +247,6 @@
     .aurora span,.mesa-card.ocupada,.card,.mesa-card{animation:none!important;}
   }
 
-  /* SPX (site externo) */
-  .spx-btn{position:fixed;right:20px;bottom:20px;z-index:1500;display:flex;align-items:center;gap:8px;
-    background:#ee4d2d;color:#fff;border:none;border-radius:999px;padding:12px 20px;font-weight:800;font-size:15px;
-    box-shadow:0 8px 24px rgba(238,77,45,.45);cursor:pointer;transition:transform .1s,box-shadow .2s,filter .2s;}
-  .spx-btn:hover{filter:brightness(1.07);box-shadow:0 10px 30px rgba(238,77,45,.6);}
-  .spx-btn:active{transform:translateY(1px);}
-  .spx-btn svg{display:block;}
-  .spx-btn.spx-ativo::after{content:"";width:9px;height:9px;border-radius:50%;background:#33d17a;
-    box-shadow:0 0 8px #33d17a;margin-left:2px;}
-  .spx-modal{position:fixed;inset:0;z-index:4000;background:rgba(4,8,16,.62);backdrop-filter:blur(4px);
-    display:flex;align-items:center;justify-content:center;padding:2vh 2vw;}
-  .spx-win{width:100%;max-width:1200px;height:96vh;background:#0a1120;border:1px solid var(--glass-brd);
-    border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 70px rgba(0,0,0,.6);}
-  .spx-head{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;
-    background:#ee4d2d;color:#fff;padding:10px 14px;}
-  .spx-title{display:flex;align-items:center;gap:8px;font-weight:800;font-size:16px;}
-  .spx-head .acts{display:flex;gap:6px;}
-  .spx-head button{background:rgba(255,255,255,.22);color:#fff;border:none;border-radius:8px;height:32px;min-width:36px;
-    font-size:15px;font-weight:800;cursor:pointer;box-shadow:none;padding:0 8px;transition:background .15s;}
-  .spx-head button:hover{background:rgba(255,255,255,.38);}
-  .spx-head .abrir{font-size:12px;padding:0 12px;}
-  .spx-body{flex:1;min-height:0;background:#fff;}
-  .spx-frame{width:100%;height:100%;border:none;display:block;}
-  @media(max-width:900px){ .spx-win{height:94vh;} .spx-head .abrir{padding:0 8px;} }
-
 </style>
 </head>
 
@@ -355,59 +330,6 @@
   <!-- MODAL RANKING -->
 
 </div>
-
-<!-- ===== SPX (site externo em modal minimizável) ===== -->
-<button id="spxBtn" class="spx-btn" onclick="spxAbrir()" title="Abrir SPX">
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M5 8.2h14l-1.1 11.3a1 1 0 0 1-1 .9H7.1a1 1 0 0 1-1-.9L5 8.2Z" fill="#fff"/>
-    <path d="M8.6 8.2V6.4a3.4 3.4 0 0 1 6.8 0v1.8" stroke="#ee4d2d" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-  </svg>
-  <span>SPX</span>
-</button>
-
-<div id="spxModal" class="spx-modal" style="display:none">
-  <div class="spx-win">
-    <div class="spx-head">
-      <span class="spx-title">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M5 8.2h14l-1.1 11.3a1 1 0 0 1-1 .9H7.1a1 1 0 0 1-1-.9L5 8.2Z" fill="#fff"/>
-          <path d="M8.6 8.2V6.4a3.4 3.4 0 0 1 6.8 0v1.8" stroke="#ee4d2d" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-        </svg>
-        SPX
-      </span>
-      <div class="acts">
-        <button class="abrir" onclick="spxNovaAba()" title="Abrir em nova aba">Nova aba ↗</button>
-        <button onclick="spxMinimizar()" title="Minimizar">—</button>
-        <button onclick="spxFechar()" title="Fechar (reinicia)">✕</button>
-      </div>
-    </div>
-    <div class="spx-body" id="spxBody"></div>
-  </div>
-</div>
-
-<script>
-window.SPX_URL='https://spx.shopee.com.br/#/index';
-let spxCriado=false;
-function spxAbrir(){
-  const body=document.getElementById('spxBody');
-  if(!spxCriado){
-    const f=document.createElement('iframe');
-    f.className='spx-frame'; f.id='spxFrame'; f.src=window.SPX_URL;
-    f.setAttribute('allow','clipboard-read; clipboard-write; geolocation; camera; microphone');
-    body.appendChild(f);
-    spxCriado=true;
-  }
-  document.getElementById('spxModal').style.display='flex';
-  document.getElementById('spxBtn').classList.add('spx-ativo');
-}
-function spxMinimizar(){ document.getElementById('spxModal').style.display='none'; } /* mantém o site aberto */
-function spxFechar(){ /* fecha e reinicia */
-  document.getElementById('spxModal').style.display='none';
-  document.getElementById('spxBody').innerHTML=''; spxCriado=false;
-  document.getElementById('spxBtn').classList.remove('spx-ativo');
-}
-function spxNovaAba(){ window.open(window.SPX_URL,'_blank','noopener'); }
-</script>
 
 <script>
 /* ==================================================================
