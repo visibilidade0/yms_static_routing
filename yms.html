@@ -247,6 +247,31 @@
     .aurora span,.mesa-card.ocupada,.card,.mesa-card{animation:none!important;}
   }
 
+  /* SPX (site externo) */
+  .spx-btn{position:fixed;right:20px;bottom:20px;z-index:1500;display:flex;align-items:center;gap:8px;
+    background:#ee4d2d;color:#fff;border:none;border-radius:999px;padding:12px 20px;font-weight:800;font-size:15px;
+    box-shadow:0 8px 24px rgba(238,77,45,.45);cursor:pointer;transition:transform .1s,box-shadow .2s,filter .2s;}
+  .spx-btn:hover{filter:brightness(1.07);box-shadow:0 10px 30px rgba(238,77,45,.6);}
+  .spx-btn:active{transform:translateY(1px);}
+  .spx-btn svg{display:block;}
+  .spx-btn.spx-ativo::after{content:"";width:9px;height:9px;border-radius:50%;background:#33d17a;
+    box-shadow:0 0 8px #33d17a;margin-left:2px;}
+  .spx-modal{position:fixed;inset:0;z-index:4000;background:rgba(4,8,16,.62);backdrop-filter:blur(4px);
+    display:flex;align-items:center;justify-content:center;padding:2vh 2vw;}
+  .spx-win{width:100%;max-width:1200px;height:96vh;background:#0a1120;border:1px solid var(--glass-brd);
+    border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 70px rgba(0,0,0,.6);}
+  .spx-head{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;
+    background:#ee4d2d;color:#fff;padding:10px 14px;}
+  .spx-title{display:flex;align-items:center;gap:8px;font-weight:800;font-size:16px;}
+  .spx-head .acts{display:flex;gap:6px;}
+  .spx-head button{background:rgba(255,255,255,.22);color:#fff;border:none;border-radius:8px;height:32px;min-width:36px;
+    font-size:15px;font-weight:800;cursor:pointer;box-shadow:none;padding:0 8px;transition:background .15s;}
+  .spx-head button:hover{background:rgba(255,255,255,.38);}
+  .spx-head .abrir{font-size:12px;padding:0 12px;}
+  .spx-body{flex:1;min-height:0;background:#fff;}
+  .spx-frame{width:100%;height:100%;border:none;display:block;}
+  @media(max-width:900px){ .spx-win{height:94vh;} .spx-head .abrir{padding:0 8px;} }
+
 </style>
 </head>
 
@@ -296,7 +321,7 @@
         <div id="redirectBox" class="redirect"></div>
 
         <div class="busca">
-          <input id="idMotorista" placeholder="DIGITE OU BIPE O ID" onkeydown="enterBuscar(event)">
+          <input id="idMotorista" placeholder="DIGITE OU BIPE O ID" onkeydown="enterBuscar(event)" oninput="idInput()">
           <button id="btnBuscar" onclick="buscar()">🔎 PESQUISAR</button>
           <button id="btnFinalizar" onclick="finalizar()">✅ FINALIZAR ROTA</button>
         </div>
@@ -330,6 +355,59 @@
   <!-- MODAL RANKING -->
 
 </div>
+
+<!-- ===== SPX (site externo em modal minimizável) ===== -->
+<button id="spxBtn" class="spx-btn" onclick="spxAbrir()" title="Abrir SPX">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M5 8.2h14l-1.1 11.3a1 1 0 0 1-1 .9H7.1a1 1 0 0 1-1-.9L5 8.2Z" fill="#fff"/>
+    <path d="M8.6 8.2V6.4a3.4 3.4 0 0 1 6.8 0v1.8" stroke="#ee4d2d" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  </svg>
+  <span>SPX</span>
+</button>
+
+<div id="spxModal" class="spx-modal" style="display:none">
+  <div class="spx-win">
+    <div class="spx-head">
+      <span class="spx-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M5 8.2h14l-1.1 11.3a1 1 0 0 1-1 .9H7.1a1 1 0 0 1-1-.9L5 8.2Z" fill="#fff"/>
+          <path d="M8.6 8.2V6.4a3.4 3.4 0 0 1 6.8 0v1.8" stroke="#ee4d2d" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        </svg>
+        SPX
+      </span>
+      <div class="acts">
+        <button class="abrir" onclick="spxNovaAba()" title="Abrir em nova aba">Nova aba ↗</button>
+        <button onclick="spxMinimizar()" title="Minimizar">—</button>
+        <button onclick="spxFechar()" title="Fechar (reinicia)">✕</button>
+      </div>
+    </div>
+    <div class="spx-body" id="spxBody"></div>
+  </div>
+</div>
+
+<script>
+window.SPX_URL='https://spx.shopee.com.br/#/index';
+let spxCriado=false;
+function spxAbrir(){
+  const body=document.getElementById('spxBody');
+  if(!spxCriado){
+    const f=document.createElement('iframe');
+    f.className='spx-frame'; f.id='spxFrame'; f.src=window.SPX_URL;
+    f.setAttribute('allow','clipboard-read; clipboard-write; geolocation; camera; microphone');
+    body.appendChild(f);
+    spxCriado=true;
+  }
+  document.getElementById('spxModal').style.display='flex';
+  document.getElementById('spxBtn').classList.add('spx-ativo');
+}
+function spxMinimizar(){ document.getElementById('spxModal').style.display='none'; } /* mantém o site aberto */
+function spxFechar(){ /* fecha e reinicia */
+  document.getElementById('spxModal').style.display='none';
+  document.getElementById('spxBody').innerHTML=''; spxCriado=false;
+  document.getElementById('spxBtn').classList.remove('spx-ativo');
+}
+function spxNovaAba(){ window.open(window.SPX_URL,'_blank','noopener'); }
+</script>
 
 <script>
 /* ==================================================================
@@ -402,18 +480,18 @@ function montarMesas(){
   pintarDonos();
 }
 function pintarDonos(){
-  // conta as rotas ATIVAS (não finalizadas) que cada mesa está tocando
+  // conta os motoristas que cada mesa está pesquisando AGORA (presença viva)
   const cont={};
   Object.values(opCache).forEach(x=>{
-    if(x.mesa && x.ymsStatus!=='finalizado'){
-      (cont[x.mesa] = cont[x.mesa] || new Set()).add(limpaRota(x.cluster));
+    if(x.mesaAtiva && x.ymsStatus!=='finalizado'){
+      (cont[x.mesaAtiva] = cont[x.mesaAtiva] || new Set()).add(limpaRota(x.cluster));
     }
   });
   document.querySelectorAll('.mesa-card').forEach(c=>{
     const set = cont[c.dataset.mesa];
     const n = set ? set.size : 0;
     c.classList.toggle('ocupada', n>0);
-    c.querySelector('.dono-tag').innerText = n>0 ? `${n} rota(s) aberta(s)` : '';
+    c.querySelector('.dono-tag').innerText = n>0 ? `${n} em andamento` : '';
   });
 }
 
@@ -482,7 +560,7 @@ function abrirModal(mesa){
   carregarResumo();
   setTimeout(()=>$('idMotorista').focus(),150);
 }
-function fecharModal(){ $('modalBg').style.display='none'; document.body.style.overflow='auto'; idAtual=''; }
+function fecharModal(){ if(idAtual) liberarPresenca(idAtual); $('modalBg').style.display='none'; document.body.style.overflow='auto'; idAtual=''; }
 function enterBuscar(e){ if(e.key==='Enter') buscar(); }
 function mostrarMsg(t,tipo){ const m=$('msg'); m.innerText=t; m.className='msg '+tipo; m.style.display='block'; setTimeout(()=>m.style.display='none',4000); }
 
@@ -524,8 +602,10 @@ async function buscar(){
   if(!id) return mostrarMsg('Digite o ID do motorista.','erro');
 
   const d = achaMotorista(id);
-  if(!d){ idAtual=''; limparResultado(); mostrarMsg('Motorista não encontrado na operação de hoje.','erro'); return; }
+  if(!d){ liberarPresenca(idAtual); idAtual=''; limparResultado(); mostrarMsg('Motorista não encontrado na operação de hoje.','erro'); return; }
 
+  // trocou de motorista nesta mesa -> libera o anterior
+  if(idAtual && idAtual!==id) liberarPresenca(idAtual);
   idAtual = id;
 
   // AUTO CHECK-IN: se o motorista foi pesquisado numa mesa, ele está no hub
@@ -533,28 +613,40 @@ async function buscar(){
     try{ await db.collection(C_OP).doc(d.docId).update({ checkin:'no_hub', horaCheckin:FV.serverTimestamp(), checkinPor:'YMS '+mesaAtual }); }catch(e){}
   }
 
-  const donoMesa = donoAtivoDaRota(d);   // outra mesa com motorista ATIVO da mesma rota
+  // presença VIVA: enquanto este ID estiver pesquisado nesta mesa, ele consta aqui
+  try{ await db.collection(C_OP).doc(d.docId).update({mesaAtiva: mesaAtual}); }catch(e){}
+
+  const donoMesa = donoAtivoDaRota(d);   // outra mesa pesquisando AGORA um motorista da mesma rota
   ehRedirect = !!donoMesa;
-
-  // se ninguém ativo da rota está em outra mesa, esta mesa assume o motorista
-  if(!ehRedirect){
-    try{ await db.collection(C_OP).doc(d.docId).update({mesa:mesaAtual, mesaEm:FV.serverTimestamp()}); }catch(e){}
-  }
-
   renderizar(d, donoMesa);
 }
 
-// Retorna a mesa (diferente da atual) que tem um motorista NÃO finalizado da mesma rota.
-// Como só considera ativos, ao finalizar o motorista a divergência some sozinha.
+// libera a presença de um motorista nesta mesa (se a presença for desta mesa)
+function liberarPresenca(id){
+  if(!id) return;
+  const d = achaMotorista(id); if(!d) return;
+  const c = opCache[d.docId];
+  if(c && c.mesaAtiva===mesaAtual){
+    try{ db.collection(C_OP).doc(d.docId).update({mesaAtiva:''}); }catch(e){}
+  }
+}
+
+// quando apaga o ID digitado, some a presença desta mesa
+function idInput(){
+  const v = $('idMotorista').value.trim();
+  if(!v && idAtual){ liberarPresenca(idAtual); idAtual=''; limparResultado(); }
+}
+
+// Retorna a mesa (diferente da atual) que está pesquisando AGORA um motorista NÃO finalizado da mesma rota.
 function donoAtivoDaRota(d){
   const rota = limpaRota(d.cluster);
   const outro = Object.values(opCache).find(x =>
     x.docId!==d.docId &&
     x.ymsStatus!=='finalizado' &&
-    x.mesa && x.mesa!==mesaAtual &&
+    x.mesaAtiva && x.mesaAtiva!==mesaAtual &&
     limpaRota(x.cluster)===rota
   );
-  return outro ? outro.mesa : null;
+  return outro ? outro.mesaAtiva : null;
 }
 
 // re-render local a partir do cache (tempo real)
@@ -644,11 +736,11 @@ function montarSituacaoClusters(d){
     .sort((a,b)=> (a.mot.ymsStatus==='finalizado'?1:0)-(b.mot.ymsStatus==='finalizado'?1:0));
   const algumPendente = outros.some(o=> o.mot.ymsStatus!=='finalizado');
 
-  // motoristas de cluster em comum abertos em OUTRA bancada.
+  // motoristas de cluster em comum sendo pesquisados AGORA em OUTRA mesa (presença viva).
   // Só vale para FIORINO e PASSEIO (incl. ZOF-AR). Motos não sinalizam.
   const ehMoto = v => String(v||'').toUpperCase().includes('MOTO');
-  const emOutraBancada = o => o.mot.ymsStatus!=='finalizado' && o.mot.mesa && o.mot.mesa!==mesaAtual && !ehMoto(o.mot.veiculo);
-  const outrasBancadas = [...new Set(outros.filter(emOutraBancada).map(o=> o.mot.mesa))];
+  const emOutraBancada = o => o.mot.ymsStatus!=='finalizado' && o.mot.mesaAtiva && o.mot.mesaAtiva!==mesaAtual && !ehMoto(o.mot.veiculo);
+  const outrasBancadas = [...new Set(outros.filter(emOutraBancada).map(o=> o.mot.mesaAtiva))];
 
   const topo = (!outros.length || !algumPendente)
     ? `<div class="cs-topo cs-topo-ok">✅ VOCÊ É O ÚLTIMO DESSAS CLUSTERS — PODE FECHAR</div>`
@@ -670,7 +762,7 @@ function montarSituacaoClusters(d){
       const tag = fim ? '✅ JÁ FINALIZOU' : '⏳ AINDA VAI CARREGAR';
       const veic = o.mot.veiculo ? ' · '+esc(o.mot.veiculo) : '';
       const naOutra = emOutraBancada(o);
-      const mesaBadge = naOutra ? `<span class="cs-mesa">📍 ${esc(o.mot.mesa)}</span>` : '';
+      const mesaBadge = naOutra ? `<span class="cs-mesa">📍 ${esc(o.mot.mesaAtiva)}</span>` : '';
       const clsBadges = o.clusters.map(c=>
         `<span class="cs-cl"><b>${esc(c.cod)}</b>${c.pac?' · '+c.pac+' pct':''}</span>`
       ).join('');
@@ -723,10 +815,13 @@ async function finalizar(){
   $('btnFinalizar').disabled=true;
   try{
     await db.collection(C_OP).doc(d.docId).update({
-      ymsStatus:'finalizado', finalizadoEm:FV.serverTimestamp(), finalizadoPor:mesaAtual
+      ymsStatus:'finalizado', finalizadoEm:FV.serverTimestamp(), finalizadoPor:mesaAtual, mesaAtiva:''
     });
-    // ao finalizar, o motorista sai da contagem de "ativos" e a divergência some sozinha
+    // finalizou: some da presença e libera a mesa para o próximo
+    idAtual=''; $('idMotorista').value='';
     mostrarMsg('Motorista finalizado com sucesso.','ok');
+    limparResultado();
+    setTimeout(()=>$('idMotorista').focus(),120);
   }catch(e){ mostrarMsg('Erro: '+e.message,'erro'); }
   finally{ $('btnFinalizar').disabled=false; }
 }
@@ -756,7 +851,7 @@ function carregarResumo(){
 }
 
 
-window.buscar=buscar; window.finalizar=finalizar; window.fecharModal=fecharModal; window.enterBuscar=enterBuscar;
+window.buscar=buscar; window.finalizar=finalizar; window.fecharModal=fecharModal; window.enterBuscar=enterBuscar; window.idInput=idInput;
 
 if(!NAO_CONFIG) mostrarTela('login');
 </script>
