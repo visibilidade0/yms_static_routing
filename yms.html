@@ -165,6 +165,12 @@
   td{padding:11px 13px;border-bottom:1px solid var(--line);text-align:left;font-weight:700;font-size:15px;word-break:break-word;color:var(--txt);}
   tr:last-child td{border-bottom:none;}
   .status-falta{background:var(--warn-soft);color:#ffe08a;}
+  .status-selo{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-title);font-weight:800;
+    font-size:clamp(18px,2.6vw,26px);letter-spacing:.5px;padding:8px 18px;border-radius:10px;border:1px solid;
+    text-transform:uppercase;line-height:1;}
+  .status-selo.st-hub{background:rgba(57,255,20,.14);color:#bdffca;border-color:var(--grn-d);box-shadow:0 0 20px rgba(57,255,20,.35);}
+  .status-selo.st-pend{background:rgba(255,176,32,.16);color:#ffe08a;border-color:var(--warn-brd);box-shadow:0 0 20px rgba(255,176,32,.3);}
+  .status-selo.st-fin{background:rgba(238,77,45,.16);color:#ffcbb8;border-color:var(--acc-brd);box-shadow:0 0 20px rgba(238,77,45,.35);}
   .rota-linha{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
   .rota-txt{font-family:var(--f-title);font-size:clamp(19px,2.6vw,28px);font-weight:800;color:#fff3ee;letter-spacing:.5px;
     text-shadow:0 0 10px rgba(255,106,61,.5);}
@@ -613,8 +619,11 @@ function renderizar(d, redirecionarPara){
 
   const fim = d.ymsStatus==='finalizado';
   const st = statusLabel(d);
-  const stCell=$('resStatus'); stCell.innerText=st;
-  stCell.className = fim ? 'status-finalizado' : 'status-falta';
+  const stKey = fim ? 'fin' : (d.checkin==='no_hub' ? 'hub' : 'pend');
+  const ico = stKey==='fin' ? '✅' : (stKey==='hub' ? '📍' : '⏳');
+  const stCell=$('resStatus');
+  stCell.innerHTML = `<span class="status-selo st-${stKey}">${ico} ${st}</span>`;
+  stCell.className = '';
 
   const ehMoto = String(d.veiculo||'').toUpperCase().includes('MOTO');
   const info = analisarCluster(d.cluster);
