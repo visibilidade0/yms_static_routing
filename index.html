@@ -572,7 +572,7 @@ function iniciarApp(){
 
   montarMesas();
   ouvirOperacao();
-  if(isAdmin){ ouvirUsuarios(); ouvirBaseCount(); }
+  /* baseCount carrega ao abrir a aba Importar */
   abrirAba('secCheckin');
 }
 
@@ -581,6 +581,10 @@ function abrirAba(id){
   $(id).classList.remove('hidden');
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.sec===id));
   if(id==='secRelatorio') renderRelatorio();
+  if(id==='secImport') ouvirBaseCount();
+  // listener de usuários só enquanto a aba estiver aberta (economiza leituras)
+  if(id==='secUsers'){ if(!unsubUsers) ouvirUsuarios(); }
+  else if(unsubUsers){ unsubUsers(); unsubUsers=null; }
   // câmera só liga na aba de check-in
   if(id==='secCheckin'){ /* usuário liga manualmente */ } else { pararCamera(); }
 }
@@ -1061,8 +1065,11 @@ if(!NAO_CONFIGURADO){
 }
 function importMsg(txt,tipo){ $('importMsg').innerHTML=`<div class="msg ${tipo}">${esc(txt)}</div>`; }
 
-function ouvirBaseCount(){
-  db.collection(C_BASE).get().then(s=> $('baseCount').textContent = s.size)
+let baseCountOk=false;
+function ouvirBaseCount(force){
+  if(baseCountOk && !force) return;      // já carregado: não relê à toa
+  db.collection(C_BASE).get()
+    .then(s=>{ $('baseCount').textContent = s.size; baseCountOk=true; })
     .catch(()=> $('baseCount').textContent='—');
 }
 
@@ -1122,7 +1129,7 @@ if(!NAO_CONFIGURADO){
       }
       baseMsg(`${n} motoristas cadastrados na base.`,'ok');
       filaBase=[]; $('fileBase').value=''; $('previewBase').innerHTML='';
-      ouvirBaseCount();
+      ouvirBaseCount(true);
     }catch(e){ baseMsg('Erro: '+e.message,'err'); }
     finally{ $('btnImportarBase').disabled = filaBase.length===0; }
   };
@@ -1223,7 +1230,7 @@ async function confirmarSub(){
     // efetua a troca na operação, mantendo a mesma rota
     await efetuarTroca(subCtx.saiDocId, { id: novo, nome, cluster, veiculo, telefone });
     fecharSub();
-    ouvirBaseCount();
+    ouvirBaseCount(true);
   }catch(e){ subMsg('Erro: '+e.message,'err'); }
   finally{ $('subConfirmar').disabled=false; }
 }
