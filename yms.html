@@ -355,6 +355,8 @@ if(NAO_CONFIG){ document.getElementById('setupWarn').style.display='flex'; }
 else{
   firebase.initializeApp(firebaseConfig);
   auth = firebase.auth(); db = firebase.firestore(); FV = firebase.firestore.FieldValue;
+  // cache offline: em reload/reconexão, busca só o que mudou (economiza leituras). Não afeta o tempo real.
+  try{ db.enablePersistence({synchronizeTabs:true}).catch(()=>{}); }catch(e){}
 }
 
 const $ = id => document.getElementById(id);
@@ -536,8 +538,10 @@ async function buscar(){
     try{ await db.collection(C_OP).doc(d.docId).update({ checkin:'no_hub', horaCheckin:FV.serverTimestamp(), checkinPor:'YMS '+mesaAtual }); }catch(e){}
   }
 
-  // presença VIVA: enquanto este ID estiver pesquisado nesta mesa, ele consta aqui
-  try{ await db.collection(C_OP).doc(d.docId).update({mesaAtiva: mesaAtual}); }catch(e){}
+  // presença VIVA: enquanto este ID estiver pesquisado nesta mesa, ele consta aqui (só grava se mudou)
+  if(!opCache[d.docId] || opCache[d.docId].mesaAtiva!==mesaAtual){
+    try{ await db.collection(C_OP).doc(d.docId).update({mesaAtiva: mesaAtual}); }catch(e){}
+  }
 
   const donoMesa = donoAtivoDaRota(d);   // outra mesa pesquisando AGORA um motorista da mesma rota
   ehRedirect = !!donoMesa;
