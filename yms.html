@@ -231,6 +231,13 @@
   .cs-fazendo{display:inline-block;background:#ff3b6b;color:#fff;border-radius:999px;padding:4px 12px;font-weight:800;
     font-size:clamp(13px,1.6vw,15px);white-space:nowrap;box-shadow:0 0 16px rgba(255,59,107,.6);animation:csFaz 1.2s ease-in-out infinite;}
   .rota-clusters{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}
+  .gaiola-pergunta{margin-top:10px;font-size:clamp(14px,1.7vw,16px);font-weight:700;color:var(--muted);}
+  .gaiola-pergunta.ok{color:#9dffb0;}
+  .gaiola-pergunta b{color:#fff;}
+  .gaiola-conflito{margin-top:10px;background:var(--err-soft);border:1px solid var(--err-brd);border-radius:10px;
+    padding:11px 14px;font-size:clamp(14px,1.8vw,17px);font-weight:800;color:#ff9ab3;
+    box-shadow:0 0 22px rgba(255,59,107,.3);animation:csFaz 1.3s ease-in-out infinite;}
+  .gaiola-conflito b{color:#fff;}
   .cl-sel-btn{background:rgba(255,106,61,.16);color:#ffd9cd;border:2px solid var(--acc);border-radius:12px;
     padding:10px 20px;font-family:var(--f-title);font-weight:800;font-size:clamp(18px,2.4vw,26px);letter-spacing:.5px;
     cursor:pointer;box-shadow:0 4px 0 rgba(0,0,0,.4),0 0 14px rgba(238,77,45,.25);text-transform:none;transition:all .1s;}
@@ -470,11 +477,30 @@ function avisoLeitura(qual, err){
 }
 function ouvirDados(){
   unsubOp = escutar(C_OP, s=>{
-    opCache={}; s.forEach(d=> opCache[d.id]={docId:d.id, ...d.data()});
+    opCache={};
+    s.forEach(d=>{
+      if(d.id==='__sinal__'){ checarSinalRecarregar(d.data()); return; } // não é motorista
+      opCache[d.id]={docId:d.id, ...d.data()};
+    });
     carregarResumo();
     pintarDonos();
     if($('modalBg').style.display==='block' && idAtual) rebuscarLocal();
   }, 'operação');
+}
+
+// recarrega o YMS quando o admin manda o sinal (usa o listener que já existe)
+let sinalRecarregar=null;
+function checarSinalRecarregar(data){
+  const v = data && data.recarregarYms;
+  if(!v) return;
+  if(sinalRecarregar===null){ sinalRecarregar=v; return; }  // 1ª leitura: só memoriza (não recarrega)
+  if(v!==sinalRecarregar){
+    sinalRecarregar=v;
+    (async ()=>{
+      try{ if(window.caches&&caches.keys){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){}
+      const u=new URL(location.href); u.searchParams.set('v', Date.now()); location.replace(u.toString());
+    })();
+  }
 }
 
 // escuta uma coleção; se der erro de permissão (ex.: regra ainda propagando),
@@ -648,13 +674,25 @@ function renderizar(d, redirecionarPara){
   const btns = botoesCluster(d);
   // Rota = clusters selecionáveis. Se for formato /N, mostra "PASSAR N" ao lado ocupando o espaço.
   if(!info.temParen && info.totalBarra>0){
-    $('resRota').innerHTML = `<div class="rota-linha">${btns}<span class="passar-destaque">PASSAR<b>${info.totalBarra}</b>PACOTES</span></div>`;
+    $('resRota').innerHTML = `<div class="rota-linha">${btns}<span class="passar-destaque">PASSAR<b>${info.totalBarra}</b>PACOTES</span></div>${perguntaGaiola(d)}`;
   }else{
-    $('resRota').innerHTML = btns;
+    $('resRota').innerHTML = btns + perguntaGaiola(d);
   }
 
   montarSituacaoClusters(d);
   montarPacotes(info, ehMoto);
+}
+
+// pergunta-guia embaixo dos botões de cluster (some quando finalizado)
+function perguntaGaiola(d){
+  if(d.ymsStatus==='finalizado' || !codigosCluster(d.cluster).length) return '';
+  const atual = (opCache[d.docId]||{}).clusterAtiva || '';
+  if(!atual) return `<div class="gaiola-pergunta">👉 Qual gaiola você vai fazer agora? Toque nela acima.</div>`;
+  const conflito = outraMesaNaGaiola(d.docId, atual);
+  if(conflito){
+    return `<div class="gaiola-conflito">⚠️ A gaiola <b>${esc(atual)}</b> também está sendo passada pela <b>${esc(conflito.mesaAtiva)}</b>${conflito.nome?` (${esc(conflito.nome)})`:''} — alinhem pra não passar em dobro!</div>`;
+  }
+  return `<div class="gaiola-pergunta ok">✅ Você marcou a <b>${esc(atual)}</b> — as outras mesas já estão vendo</div>`;
 }
 
 // Rota como botões de cluster (um por vez, tipo rádio). Finalizado = só texto.
@@ -669,11 +707,27 @@ function botoesCluster(d){
   ).join('') + `</span>`;
 }
 
-// grava/troca a cluster atual (um por vez); clicar na mesma desmarca
+// quem mais (outra mesa) está fazendo a mesma gaiola AGORA
+function outraMesaNaGaiola(docId, cod){
+  return Object.values(opCache).find(x =>
+    x.docId!==docId && x.ymsStatus!=='finalizado' &&
+    x.clusterAtiva===cod && x.mesaAtiva && x.mesaAtiva!==mesaAtual
+  );
+}
+
+// grava/troca a cluster atual (um por vez); clicar na mesma desmarca. Avisa se outra mesa já está na mesma gaiola.
 async function marcarCluster(docId, cod){
   const c = opCache[docId];
   const atual = c ? (c.clusterAtiva||'') : '';
   const nova = (atual===cod) ? '' : cod;
+  if(nova){
+    const conflito = outraMesaNaGaiola(docId, nova);
+    if(conflito){
+      const ok = confirm(`⚠️ ATENÇÃO: a gaiola ${nova} JÁ está sendo passada pela ${conflito.mesaAtiva}`
+        + `${conflito.nome?` (${conflito.nome})`:''}.\n\nAlinhe com a outra mesa pra não passar em dobro.\n\nQuer marcar mesmo assim?`);
+      if(!ok) return;
+    }
+  }
   try{ await db.collection(C_OP).doc(docId).update({clusterAtiva: nova}); }catch(e){}
 }
 window.marcarCluster = marcarCluster;
