@@ -230,7 +230,7 @@
       <b id="whoNome">—</b><br />
       <span id="whoRole" class="role-tag"></span>
     </div>
-    <button id="btnAtualizar" class="btn small hidden" style="margin-left:10px" title="Buscar a versão mais recente">🔄 Atualizar</button>
+    <button id="btnAtualizar" class="btn small hidden" style="margin-left:10px" title="Manda todas as mesas do YMS atualizarem">🔄 Atualizar YMS</button>
     <button id="btnSair" class="btn sec small" style="margin-left:10px">Sair</button>
   </header>
 
@@ -509,14 +509,17 @@ if(!NAO_CONFIGURADO){
   $('btnSair').onclick = ()=> auth.signOut();
   $('btnSairWait').onclick = ()=> auth.signOut();
 
-  // Atualizar: recarrega buscando a versão mais recente (fura o cache)
+  // Atualizar YMS: grava um sinal; todo YMS aberto recarrega sozinho (usa o listener que já existe)
   $('btnAtualizar').onclick = async ()=>{
+    if(!confirm('Mandar todas as mesas do YMS atualizarem para a versão mais recente agora?')) return;
     $('btnAtualizar').disabled = true;
-    $('btnAtualizar').textContent = 'Atualizando…';
-    try{ if(window.caches && caches.keys){ const ks = await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){}
-    const u = new URL(location.href);
-    u.searchParams.set('v', Date.now());   // muda a URL pra forçar baixar de novo
-    location.replace(u.toString());
+    const txtOrig = $('btnAtualizar').textContent;
+    $('btnAtualizar').textContent = 'Enviando…';
+    try{
+      await db.collection(C_OP).doc('__sinal__').set({ recarregarYms: Date.now() }, {merge:true});
+      $('btnAtualizar').textContent = '✓ Enviado';
+    }catch(e){ $('btnAtualizar').textContent = 'Erro'; }
+    setTimeout(()=>{ $('btnAtualizar').textContent = txtOrig; $('btnAtualizar').disabled = false; }, 2500);
   };
 
   auth.onAuthStateChanged(async (user)=>{
@@ -607,7 +610,7 @@ function abrirAba(id){
 function ouvirOperacao(){
   unsubOp = db.collection(C_OP).onSnapshot(snap=>{
     opCache = {};
-    snap.forEach(d=> opCache[d.id] = {docId:d.id, ...d.data()});
+    snap.forEach(d=>{ if(d.id==='__sinal__') return; opCache[d.id] = {docId:d.id, ...d.data()}; });
     renderStatus();
     renderStatusMini();
     if(!$('secRelatorio').classList.contains('hidden')) renderRelatorio();
