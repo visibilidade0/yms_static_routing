@@ -230,14 +230,14 @@
   .cs-cl.cs-cl-fazendo b{color:#1a0005;}
   .cs-fazendo{display:inline-block;background:#ff3b6b;color:#fff;border-radius:999px;padding:4px 12px;font-weight:800;
     font-size:clamp(13px,1.6vw,15px);white-space:nowrap;box-shadow:0 0 16px rgba(255,59,107,.6);animation:csFaz 1.2s ease-in-out infinite;}
-  .cl-sel-btn{background:rgba(255,106,61,.12);color:#ffcbb8;border:1px solid var(--acc-brd);border-radius:999px;
-    padding:8px 16px;font-family:var(--f-body);font-weight:800;font-size:clamp(15px,1.9vw,18px);letter-spacing:.5px;
-    cursor:pointer;box-shadow:none;text-transform:none;transition:all .12s;margin:0 6px 6px 0;}
-  .cl-sel-btn:hover{background:rgba(255,106,61,.24);box-shadow:0 0 14px rgba(238,77,45,.4);}
+  .rota-clusters{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}
+  .cl-sel-btn{background:rgba(255,106,61,.16);color:#ffd9cd;border:2px solid var(--acc);border-radius:12px;
+    padding:10px 20px;font-family:var(--f-title);font-weight:800;font-size:clamp(18px,2.4vw,26px);letter-spacing:.5px;
+    cursor:pointer;box-shadow:0 4px 0 rgba(0,0,0,.4),0 0 14px rgba(238,77,45,.25);text-transform:none;transition:all .1s;}
+  .cl-sel-btn:hover{background:rgba(255,106,61,.28);box-shadow:0 4px 0 rgba(0,0,0,.4),0 0 20px rgba(238,77,45,.5);}
+  .cl-sel-btn:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.4);}
   .cl-sel-btn.ativa{background:linear-gradient(180deg,#ff5b7f,#ff3b6b);color:#fff;border-color:#ff3b6b;
-    box-shadow:0 0 20px rgba(255,59,107,.7);}
-  .cl-sel-limpar{background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;
-    padding:8px 14px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:none;text-transform:none;}
+    box-shadow:0 4px 0 rgba(120,0,25,.5),0 0 26px rgba(255,59,107,.8);animation:csFaz 1.2s ease-in-out infinite;}
   @keyframes csGlow{0%,100%{box-shadow:0 0 12px rgba(255,176,32,.55)}50%{box-shadow:0 0 26px rgba(255,176,32,.95)}}
   .cs-cl.cs-cl-glow{background:linear-gradient(180deg,#ffc23a,#ffb020);color:#2a1a00;border-color:#ffd23f;
     font-weight:800;animation:csGlow 1.5s ease-in-out infinite;}
@@ -336,7 +336,6 @@
           <table><tbody>
             <tr><th>MOTORISTA</th><td id="resNome"></td></tr>
             <tr><th>ROTA</th><td id="resRota"></td></tr>
-            <tr id="linhaFazendo"><th>FAZENDO</th><td id="clusterSel"></td></tr>
             <tr><th>VEÍCULO</th><td id="resVeiculo"></td></tr>
             <tr><th>STATUS</th><td id="resStatus"></td></tr>
           </tbody></table>
@@ -646,37 +645,35 @@ function renderizar(d, redirecionarPara){
 
   const ehMoto = String(d.veiculo||'').toUpperCase().includes('MOTO');
   const info = analisarCluster(d.cluster);
-  // Sem parênteses mas com /N no fim: destaca "PASSAR N PACOTES" ao lado da rota
+  const btns = botoesCluster(d);
+  // Rota = clusters selecionáveis. Se for formato /N, mostra "PASSAR N" ao lado ocupando o espaço.
   if(!info.temParen && info.totalBarra>0){
-    $('resRota').innerHTML = `<div class="rota-linha"><span class="rota-txt">${esc(d.cluster)}</span>`
-      + `<span class="passar-destaque">PASSAR<b>${info.totalBarra}</b>PACOTES</span></div>`;
+    $('resRota').innerHTML = `<div class="rota-linha">${btns}<span class="passar-destaque">PASSAR<b>${info.totalBarra}</b>PACOTES</span></div>`;
   }else{
-    $('resRota').innerHTML = `<span class="rota-txt">${esc(d.cluster||'')}</span>`;
+    $('resRota').innerHTML = btns;
   }
 
-  montarClusterSel(d);
   montarSituacaoClusters(d);
   montarPacotes(info, ehMoto);
 }
 
-// Botões pra a mesa marcar QUAL cluster está fazendo agora (um por vez, tipo rádio)
-function montarClusterSel(d){
-  const box = $('clusterSel'); if(!box) return;
+// Rota como botões de cluster (um por vez, tipo rádio). Finalizado = só texto.
+function botoesCluster(d){
   const cods = codigosCluster(d.cluster);
   const fim = d.ymsStatus==='finalizado';
-  if(!cods.length || fim){ $('linhaFazendo').style.display='none'; return; }
-  $('linhaFazendo').style.display='';
+  if(!cods.length) return `<span class="rota-txt">${esc(d.cluster||'')}</span>`;
+  if(fim) return `<span class="rota-txt">${esc(cods.join('  '))}</span>`;
   const atual = (opCache[d.docId]||{}).clusterAtiva || '';
-  box.innerHTML = cods.map(c=>
-    `<button type="button" class="cl-sel-btn${c===atual?' ativa':''}" onclick="marcarCluster('${esc(d.docId)}','${esc(c)}')">${esc(c)}</button>`
-  ).join('') + (atual?` <button type="button" class="cl-sel-limpar" onclick="marcarCluster('${esc(d.docId)}','')">limpar</button>`:'');
+  return `<span class="rota-clusters">` + cods.map(c=>
+    `<button type="button" class="cl-sel-btn${c===atual?' ativa':''}" onclick="marcarCluster('${esc(d.docId)}','${esc(c)}')">${c===atual?'🔴 ':''}${esc(c)}</button>`
+  ).join('') + `</span>`;
 }
 
-// grava/troca a cluster atual (um por vez); se clicar na mesma, desmarca
+// grava/troca a cluster atual (um por vez); clicar na mesma desmarca
 async function marcarCluster(docId, cod){
   const c = opCache[docId];
   const atual = c ? (c.clusterAtiva||'') : '';
-  const nova = (atual===cod) ? '' : cod;   // clicar na mesma desmarca
+  const nova = (atual===cod) ? '' : cod;
   try{ await db.collection(C_OP).doc(docId).update({clusterAtiva: nova}); }catch(e){}
 }
 window.marcarCluster = marcarCluster;
