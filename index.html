@@ -230,6 +230,7 @@
       <b id="whoNome">—</b><br />
       <span id="whoRole" class="role-tag"></span>
     </div>
+    <button id="btnAtualizar" class="btn small hidden" style="margin-left:10px" title="Buscar a versão mais recente">🔄 Atualizar</button>
     <button id="btnSair" class="btn sec small" style="margin-left:10px">Sair</button>
   </header>
 
@@ -508,6 +509,16 @@ if(!NAO_CONFIGURADO){
   $('btnSair').onclick = ()=> auth.signOut();
   $('btnSairWait').onclick = ()=> auth.signOut();
 
+  // Atualizar: recarrega buscando a versão mais recente (fura o cache)
+  $('btnAtualizar').onclick = async ()=>{
+    $('btnAtualizar').disabled = true;
+    $('btnAtualizar').textContent = 'Atualizando…';
+    try{ if(window.caches && caches.keys){ const ks = await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){}
+    const u = new URL(location.href);
+    u.searchParams.set('v', Date.now());   // muda a URL pra forçar baixar de novo
+    location.replace(u.toString());
+  };
+
   auth.onAuthStateChanged(async (user)=>{
     pararCamera();
     if(unsubOp){unsubOp();unsubOp=null;} if(unsubUsers){unsubUsers();unsubUsers=null;}
@@ -560,6 +571,7 @@ function iniciarApp(){
 
   // bipador não vê nenhum dado: só o scanner
   $('statusMini').style.display = isAdmin ? '' : 'none';
+  $('btnAtualizar').classList.toggle('hidden', !isAdmin);
 
   // monta abas conforme papel
   const tabs = $('tabs'); tabs.innerHTML='';
