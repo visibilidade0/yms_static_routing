@@ -224,6 +224,10 @@
   .cs-cl{background:rgba(255,106,61,.12);color:#ffcbb8;border:1px solid var(--cyan-d);border-radius:999px;padding:5px 12px;
     font-weight:700;font-size:clamp(14px,1.7vw,16px);}
   .cs-cl b{color:#fff;}
+  @keyframes csGlow{0%,100%{box-shadow:0 0 12px rgba(255,176,32,.55)}50%{box-shadow:0 0 26px rgba(255,176,32,.95)}}
+  .cs-cl.cs-cl-glow{background:linear-gradient(180deg,#ffc23a,#ffb020);color:#2a1a00;border-color:#ffd23f;
+    font-weight:800;animation:csGlow 1.5s ease-in-out infinite;}
+  .cs-cl.cs-cl-glow b{color:#1a1000;}
   .cs-cls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
   .cs-mot .status-finalizado,.cs-mot .status-falta{padding:2px 10px;border-radius:999px;font-size:13px;}
 
@@ -658,15 +662,13 @@ function montarSituacaoClusters(d){
   if(!cods.length){ box.style.display='none'; return; }
   box.style.display='block';
 
-  // monta um mapa: cada OUTRO motorista -> quais clusters divide (com quantidade)
+  // cada OUTRO motorista que cruza pelo menos uma cluster com o pesquisado -> guarda a ROTA COMPLETA dele
   const mapa = {};
-  cods.forEach(cod=>{
-    Object.values(opCache).forEach(x=>{
-      if(x.docId===d.docId) return;
-      if(!codigosCluster(x.cluster).includes(cod)) return;
-      if(!mapa[x.docId]) mapa[x.docId] = { mot:x, clusters:[] };
-      mapa[x.docId].clusters.push({ cod, pac: pacotesDoCluster(x.cluster, cod) });
-    });
+  Object.values(opCache).forEach(x=>{
+    if(x.docId===d.docId) return;
+    const codsX = codigosCluster(x.cluster);
+    if(!codsX.some(c=> cods.includes(c))) return;   // não cruza nenhuma cluster do pesquisado
+    mapa[x.docId] = { mot:x, cods:codsX };
   });
 
   const outros = Object.values(mapa)
@@ -700,9 +702,12 @@ function montarSituacaoClusters(d){
       const veic = o.mot.veiculo ? ' · '+esc(o.mot.veiculo) : '';
       const naOutra = emOutraBancada(o);
       const mesaBadge = naOutra ? `<span class="cs-mesa">📍 ${esc(o.mot.mesaAtiva)}</span>` : '';
-      const clsBadges = o.clusters.map(c=>
-        `<span class="cs-cl"><b>${esc(c.cod)}</b>${c.pac?' · '+c.pac+' pct':''}</span>`
-      ).join('');
+      // ROTA COMPLETA do outro motorista; brilha só a(s) cluster(s) da junção (que cruzam a rota do pesquisado)
+      const clsBadges = o.cods.map(cod=>{
+        const junc = cods.includes(cod);
+        const pac = pacotesDoCluster(o.mot.cluster, cod);
+        return `<span class="cs-cl${junc?' cs-cl-glow':''}"><b>${esc(cod)}</b>${pac?' · '+pac+' pct':''}</span>`;
+      }).join('');
       return `<div class="cs-card ${cls}${naOutra?' cs-outra':''}">
         <div class="cs-head">
           <span class="cs-nome2">${esc(o.mot.nome||o.mot.id)}${veic}</span>
