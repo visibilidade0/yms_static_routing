@@ -224,6 +224,20 @@
   .cs-cl{background:rgba(255,106,61,.12);color:#ffcbb8;border:1px solid var(--cyan-d);border-radius:999px;padding:5px 12px;
     font-weight:700;font-size:clamp(14px,1.7vw,16px);}
   .cs-cl b{color:#fff;}
+  @keyframes csFaz{0%,100%{box-shadow:0 0 12px rgba(255,59,107,.6)}50%{box-shadow:0 0 26px rgba(255,59,107,1)}}
+  .cs-cl.cs-cl-fazendo{background:linear-gradient(180deg,#ff5b7f,#ff3b6b);color:#2a0009;border-color:#ff3b6b;
+    font-weight:800;animation:csFaz 1.2s ease-in-out infinite;}
+  .cs-cl.cs-cl-fazendo b{color:#1a0005;}
+  .cs-fazendo{display:inline-block;background:#ff3b6b;color:#fff;border-radius:999px;padding:4px 12px;font-weight:800;
+    font-size:clamp(13px,1.6vw,15px);white-space:nowrap;box-shadow:0 0 16px rgba(255,59,107,.6);animation:csFaz 1.2s ease-in-out infinite;}
+  .cl-sel-btn{background:rgba(255,106,61,.12);color:#ffcbb8;border:1px solid var(--acc-brd);border-radius:999px;
+    padding:8px 16px;font-family:var(--f-body);font-weight:800;font-size:clamp(15px,1.9vw,18px);letter-spacing:.5px;
+    cursor:pointer;box-shadow:none;text-transform:none;transition:all .12s;margin:0 6px 6px 0;}
+  .cl-sel-btn:hover{background:rgba(255,106,61,.24);box-shadow:0 0 14px rgba(238,77,45,.4);}
+  .cl-sel-btn.ativa{background:linear-gradient(180deg,#ff5b7f,#ff3b6b);color:#fff;border-color:#ff3b6b;
+    box-shadow:0 0 20px rgba(255,59,107,.7);}
+  .cl-sel-limpar{background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;
+    padding:8px 14px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:none;text-transform:none;}
   @keyframes csGlow{0%,100%{box-shadow:0 0 12px rgba(255,176,32,.55)}50%{box-shadow:0 0 26px rgba(255,176,32,.95)}}
   .cs-cl.cs-cl-glow{background:linear-gradient(180deg,#ffc23a,#ffb020);color:#2a1a00;border-color:#ffd23f;
     font-weight:800;animation:csGlow 1.5s ease-in-out infinite;}
@@ -322,6 +336,7 @@
           <table><tbody>
             <tr><th>MOTORISTA</th><td id="resNome"></td></tr>
             <tr><th>ROTA</th><td id="resRota"></td></tr>
+            <tr id="linhaFazendo"><th>FAZENDO</th><td id="clusterSel"></td></tr>
             <tr><th>VEÍCULO</th><td id="resVeiculo"></td></tr>
             <tr><th>STATUS</th><td id="resStatus"></td></tr>
           </tbody></table>
@@ -564,7 +579,7 @@ function liberarPresenca(id){
   const d = achaMotorista(id); if(!d) return;
   const c = opCache[d.docId];
   if(c && c.mesaAtiva===mesaAtual){
-    try{ db.collection(C_OP).doc(d.docId).update({mesaAtiva:''}); }catch(e){}
+    try{ db.collection(C_OP).doc(d.docId).update({mesaAtiva:'', clusterAtiva:''}); }catch(e){}
   }
 }
 
@@ -639,9 +654,32 @@ function renderizar(d, redirecionarPara){
     $('resRota').innerHTML = `<span class="rota-txt">${esc(d.cluster||'')}</span>`;
   }
 
+  montarClusterSel(d);
   montarSituacaoClusters(d);
   montarPacotes(info, ehMoto);
 }
+
+// Botões pra a mesa marcar QUAL cluster está fazendo agora (um por vez, tipo rádio)
+function montarClusterSel(d){
+  const box = $('clusterSel'); if(!box) return;
+  const cods = codigosCluster(d.cluster);
+  const fim = d.ymsStatus==='finalizado';
+  if(!cods.length || fim){ $('linhaFazendo').style.display='none'; return; }
+  $('linhaFazendo').style.display='';
+  const atual = (opCache[d.docId]||{}).clusterAtiva || '';
+  box.innerHTML = cods.map(c=>
+    `<button type="button" class="cl-sel-btn${c===atual?' ativa':''}" onclick="marcarCluster('${esc(d.docId)}','${esc(c)}')">${esc(c)}</button>`
+  ).join('') + (atual?` <button type="button" class="cl-sel-limpar" onclick="marcarCluster('${esc(d.docId)}','')">limpar</button>`:'');
+}
+
+// grava/troca a cluster atual (um por vez); se clicar na mesma, desmarca
+async function marcarCluster(docId, cod){
+  const c = opCache[docId];
+  const atual = c ? (c.clusterAtiva||'') : '';
+  const nova = (atual===cod) ? '' : cod;   // clicar na mesma desmarca
+  try{ await db.collection(C_OP).doc(docId).update({clusterAtiva: nova}); }catch(e){}
+}
+window.marcarCluster = marcarCluster;
 
 // Códigos de cluster de uma rota (B-10, C-24...), sem as quantidades
 function codigosCluster(str){
@@ -701,17 +739,22 @@ function montarSituacaoClusters(d){
       const tag = fim ? '✅ JÁ FINALIZOU' : '⏳ AINDA VAI CARREGAR';
       const veic = o.mot.veiculo ? ' · '+esc(o.mot.veiculo) : '';
       const naOutra = emOutraBancada(o);
+      const fazendo = (!fim && o.mot.clusterAtiva) ? o.mot.clusterAtiva : '';
+      const mesaFaz = o.mot.mesaAtiva ? ' · '+esc(o.mot.mesaAtiva) : '';
+      const fazBadge = fazendo ? `<span class="cs-fazendo">🔴 FAZENDO ${esc(fazendo)}${mesaFaz}</span>` : '';
       const mesaBadge = naOutra ? `<span class="cs-mesa">📍 ${esc(o.mot.mesaAtiva)}</span>` : '';
-      // ROTA COMPLETA do outro motorista; brilha só a(s) cluster(s) da junção (que cruzam a rota do pesquisado)
+      // ROTA COMPLETA do outro motorista; vermelho = cluster que ele faz agora; dourado = junção com a rota do pesquisado
       const clsBadges = o.cods.map(cod=>{
+        const faz = cod===fazendo;
         const junc = cods.includes(cod);
+        const extra = faz ? ' cs-cl-fazendo' : (junc ? ' cs-cl-glow' : '');
         const pac = pacotesDoCluster(o.mot.cluster, cod);
-        return `<span class="cs-cl${junc?' cs-cl-glow':''}"><b>${esc(cod)}</b>${pac?' · '+pac+' pct':''}</span>`;
+        return `<span class="cs-cl${extra}"><b>${esc(cod)}</b>${pac?' · '+pac+' pct':''}</span>`;
       }).join('');
       return `<div class="cs-card ${cls}${naOutra?' cs-outra':''}">
         <div class="cs-head">
           <span class="cs-nome2">${esc(o.mot.nome||o.mot.id)}${veic}</span>
-          ${mesaBadge}
+          ${fazendo ? fazBadge : mesaBadge}
           <span class="cs-tag">${tag}</span>
         </div>
         <div class="cs-cls">${clsBadges}</div>
@@ -757,7 +800,7 @@ async function finalizar(){
   $('btnFinalizar').disabled=true;
   try{
     await db.collection(C_OP).doc(d.docId).update({
-      ymsStatus:'finalizado', finalizadoEm:FV.serverTimestamp(), finalizadoPor:mesaAtual, mesaAtiva:''
+      ymsStatus:'finalizado', finalizadoEm:FV.serverTimestamp(), finalizadoPor:mesaAtual, mesaAtiva:'', clusterAtiva:''
     });
     // finalizou: some da presença e libera a mesa para o próximo
     idAtual=''; $('idMotorista').value='';
