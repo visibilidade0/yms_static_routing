@@ -238,6 +238,24 @@
     padding:11px 14px;font-size:clamp(14px,1.8vw,17px);font-weight:800;color:#ff9ab3;
     box-shadow:0 0 22px rgba(255,59,107,.3);animation:csFaz 1.3s ease-in-out infinite;}
   .gaiola-conflito b{color:#fff;}
+
+  /* Modal de confirmação */
+  #confirmBg{align-items:center;justify-content:center;padding:20px;z-index:1200;}
+  .confirm-card{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--acc-brd);
+    box-shadow:0 0 44px rgba(238,77,45,.3),inset 0 0 20px rgba(238,77,45,.08);padding:26px 24px;text-align:center;
+    clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px);}
+  .confirm-ico{font-size:44px;line-height:1;margin-bottom:8px;filter:drop-shadow(0 0 12px rgba(255,176,32,.6));}
+  .confirm-titulo{font-family:var(--f-title);font-size:clamp(18px,2.6vw,22px);font-weight:800;color:#fff3ee;
+    text-shadow:0 0 12px rgba(255,106,61,.5);margin-bottom:10px;}
+  .confirm-msg{font-size:clamp(15px,1.9vw,17px);font-weight:600;color:var(--txt);line-height:1.5;margin-bottom:20px;}
+  .confirm-msg b{color:#fff;}
+  .confirm-acoes{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+  .confirm-ok,.confirm-cancel{border:none;border-radius:10px;padding:13px 20px;font-family:var(--f-body);font-weight:800;
+    font-size:15px;letter-spacing:.5px;cursor:pointer;text-transform:uppercase;flex:1;min-width:130px;}
+  .confirm-ok{background:var(--acc);color:#2a0d05;box-shadow:0 0 18px rgba(238,77,45,.5);}
+  .confirm-ok:hover{filter:brightness(1.08);}
+  .confirm-cancel{background:transparent;color:var(--muted);border:1px solid var(--line);}
+  .confirm-cancel:hover{background:rgba(255,255,255,.06);}
   .cl-sel-btn{background:rgba(255,106,61,.16);color:#ffd9cd;border:2px solid var(--acc);border-radius:12px;
     padding:10px 20px;font-family:var(--f-title);font-weight:800;font-size:clamp(18px,2.4vw,26px);letter-spacing:.5px;
     cursor:pointer;box-shadow:0 4px 0 rgba(0,0,0,.4),0 0 14px rgba(238,77,45,.25);text-transform:none;transition:all .1s;}
@@ -360,6 +378,19 @@
   </div>
 
   <!-- MODAL RANKING -->
+
+  <!-- MODAL DE CONFIRMAÇÃO / AVISO -->
+  <div class="modal-bg" id="confirmBg" style="display:none">
+    <div class="confirm-card">
+      <div class="confirm-ico" id="confirmIco">⚠️</div>
+      <div class="confirm-titulo" id="confirmTitulo">Atenção</div>
+      <div class="confirm-msg" id="confirmMsg"></div>
+      <div class="confirm-acoes">
+        <button type="button" class="confirm-cancel" id="confirmCancel">Cancelar</button>
+        <button type="button" class="confirm-ok" id="confirmOk">Confirmar</button>
+      </div>
+    </div>
+  </div>
 
 </div>
 
@@ -715,6 +746,22 @@ function outraMesaNaGaiola(docId, cod){
   );
 }
 
+// modal de confirmação no tema do YMS (substitui o confirm feio do navegador)
+function modalConfirmar({titulo='Atenção', msg='', ico='⚠️', okTxt='Confirmar', cancelTxt='Cancelar'}){
+  return new Promise(res=>{
+    $('confirmIco').textContent = ico;
+    $('confirmTitulo').textContent = titulo;
+    $('confirmMsg').innerHTML = msg;
+    $('confirmOk').textContent = okTxt;
+    $('confirmCancel').textContent = cancelTxt;
+    const bg=$('confirmBg'); bg.style.display='flex';
+    const fechar=v=>{ bg.style.display='none'; $('confirmOk').onclick=null; $('confirmCancel').onclick=null; bg.onclick=null; res(v); };
+    $('confirmOk').onclick=()=>fechar(true);
+    $('confirmCancel').onclick=()=>fechar(false);
+    bg.onclick=e=>{ if(e.target===bg) fechar(false); };
+  });
+}
+
 // grava/troca a cluster atual (um por vez); clicar na mesma desmarca. Avisa se outra mesa já está na mesma gaiola.
 async function marcarCluster(docId, cod){
   const c = opCache[docId];
@@ -723,8 +770,12 @@ async function marcarCluster(docId, cod){
   if(nova){
     const conflito = outraMesaNaGaiola(docId, nova);
     if(conflito){
-      const ok = confirm(`⚠️ ATENÇÃO: a gaiola ${nova} JÁ está sendo passada pela ${conflito.mesaAtiva}`
-        + `${conflito.nome?` (${conflito.nome})`:''}.\n\nAlinhe com a outra mesa pra não passar em dobro.\n\nQuer marcar mesmo assim?`);
+      const ok = await modalConfirmar({
+        ico:'⚠️', titulo:'Gaiola já em andamento',
+        msg:`A gaiola <b>${esc(nova)}</b> já está sendo passada pela <b>${esc(conflito.mesaAtiva)}</b>`
+            + `${conflito.nome?` (${esc(conflito.nome)})`:''}.<br><br>Alinhem pra não passar em dobro.<br><br><b>Quer marcar mesmo assim?</b>`,
+        okTxt:'Marcar mesmo assim', cancelTxt:'Cancelar'
+      });
       if(!ok) return;
     }
   }
